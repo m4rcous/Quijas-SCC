@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { openDB } from 'idb'
 
-test('la versión 2 conserva la cola y agrega sesiones y lecturas', async () => {
+test('la versión 3 migra desde v1 y conserva cola, sesiones y lecturas', async () => {
   const anterior = await openDB('scc', 1, {
     upgrade(db) {
       db.createObjectStore('meta')
@@ -49,4 +49,10 @@ test('la versión 2 conserva la cola y agrega sesiones y lecturas', async () => 
 
   assert.equal((await obtenerSesionLocal('sesion-local')).estado, 'ACTIVA')
   assert.equal(await contarLecturasSesion('sesion-local'), 1)
+  const migrada = await openDB('scc', 3)
+  assert.equal(
+    migrada.transaction('sesiones').store.indexNames.contains('dni_operador'),
+    true
+  )
+  migrada.close()
 })

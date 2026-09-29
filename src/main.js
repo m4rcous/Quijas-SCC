@@ -3,22 +3,28 @@ import { validarOperador } from './modules/auth'
 import { buscarCosechador } from './modules/asignacionTickets'
 import { actualizarCacheOperativa } from './modules/cacheOperativa'
 import {
-  agregarOperacion,
-  agregarRolTrabajador,
-  cerrarSesionLocal,
   contarLecturasCosechador,
   contarLecturasSesion,
   contarErrores,
   contarPendientes,
   existeTicketPendiente,
-  guardarLecturaLocal,
-  guardarSesionLocal,
-  guardarTicketLocal,
+  guardarAsignacionOffline,
+  registrarJaberoOffline,
+  iniciarSesionOffline,
+  registrarLecturaOffline,
+  finalizarSesionOffline,
   obtenerLotes,
   obtenerTicket,
-  obtenerTrabajador
+  obtenerTrabajador,
+  obtenerSesionesActivas,
+  obtenerSesionActivaJabero,
+  obtenerUltimaLecturaSesion,
+  obtenerColaCompleta,
+  reintentarOperacion,
+  descartarOperacion
 } from './offline/db'
 import { sincronizarPendientes } from './offline/sync'
+import { evaluarDescarteOperacion } from './offline/cola'
 
 // VISTAS
 
@@ -27,6 +33,10 @@ const vistaMenu = document.querySelector('#vista-menu')
 const vistaAsignacion = document.querySelector('#vista-asignacion')
 const vistaJaberos = document.querySelector('#vista-jaberos')
 const vistaLectura = document.querySelector('#vista-lectura')
+const vistaSync = document.querySelector('#vista-sync')
+const sesionesRestaurables = document.querySelector('#sesiones-restaurables')
+const resumenSync = document.querySelector('#resumen-sync')
+const operacionesError = document.querySelector('#operaciones-error')
 
 // LOGIN
 
@@ -104,6 +114,14 @@ window.addEventListener('online', async () => {
 })
 
 window.addEventListener('offline', actualizarEstadoConexion)
+window.addEventListener('focus', () => {
+  if (navigator.onLine)
+    sincronizarPendientes().then(actualizarEstadoConexion).catch(console.error)
+})
+setInterval(() => {
+  if (navigator.onLine)
+    sincronizarPendientes().then(actualizarEstadoConexion).catch(console.error)
+}, 30000)
 
 // LOGIN
 
@@ -127,6 +145,8 @@ formLogin.addEventListener('submit', async (event) => {
       }
     }
     mostrarMenu()
+    if (navigator.onLine)
+      sincronizarPendientes().then(actualizarEstadoConexion).catch(console.error)
   } catch (error) {
     mostrarErrorLogin(error.message)
     dniOperadorInput.select()
@@ -154,8 +174,118 @@ btnMenuLectura.addEventListener('click', async () => {
   lecturaOperador.textContent = operador.nombre
   mostrarVista(vistaLectura)
   await cargarLotes()
-  loteLectura.focus()
+  await mostrarSesionesActivas()
+  if (!sesionLectura) loteLectura.focus()
 })
+
+estadoConexion.addEventListener('click', mostrarEstadoSync)
+document.querySelector('#btn-volver-sync').addEventListener('click', mostrarMenu)
+
+async function mostrarEstadoSync() {
+  mostrarVista(vistaSync)
+  await actualizarVistaSync()
+}
+
+async function actualizarVistaSync() {
+  const operaciones = (await obtenerColaCompleta()).sort((a, b) =>
+    a.creado_en.localeCompare(b.creado_en)
+  )
+  const pendientes = operaciones.filter((item) => item.estado === 'PENDIENTE')
+  const errores = operaciones.filter((item) => item.estado === 'ERROR')
+  resumenSync.textContent = `${pendientes.length} pendientes · ${errores.length} errores`
+  operacionesError.replaceChildren()
+  if (!errores.length) {
+    operacionesError.textContent = 'No hay operaciones con error.'
+    return
+  }
+  for (const operacion of errores) {
+    const card = document.createElement('article')
+    card.className = 'card'
+    const titulo = document.createElement('h2')
+    titulo.textContent = operacion.tipo.replaceAll('_', ' ')
+    const detalle = document.createElement('p')
+    detalle.className = 'detalle-sync'
+    const payload = operacion.payload
+    const dato =
+      payload.codigoTicket ??
+      payload.sesionId ??
+      (payload.dniTrabajador
+        ? `DNI terminado en ${payload.dniTrabajador.slice(-4)}`
+        : '')
+    const mensaje = String(operacion.error ?? 'Error sin detalle')
+      .replace(/\b\d{8}\b/g, '********')
+      .replace(/Bearer\s+\S+/gi, 'Bearer [oculto]')
+    detalle.textContent = `${new Date(operacion.creado_en).toLocaleString()} · ${dato} · ${mensaje}`
+    const acciones = document.createElement('div')
+    acciones.className = 'acciones-sync'
+    const reintentar = document.createElement('button')
+    reintentar.textContent = 'Reintentar'
+    reintentar.addEventListener('click', async () => {
+      await reintentarOperacion(operacion.id)
+      if (navigator.onLine) await sincronizarPendientes()
+      await actualizarVistaSync()
+      await actualizarEstadoConexion()
+    })
+    acciones.append(reintentar)
+    const descarte = evaluarDescarteOperacion(operacion, operaciones)
+    if (descarte.permitido) {
+      const descartar = document.createElement('button')
+      descartar.className = 'boton-secundario'
+      descartar.textContent = 'Descartar'
+      descartar.addEventListener('click', async () => {
+        if (await descartarOperacion(operacion.id)) {
+          await actualizarVistaSync()
+          await actualizarEstadoConexion()
+        }
+      })
+      acciones.append(descartar)
+    } else {
+      const motivo = document.createElement('p')
+      motivo.className = 'detalle-sync'
+      motivo.textContent = descarte.dependientes
+        ? `Esta operación tiene ${descarte.dependientes} ${descarte.dependientes === 1 ? 'operación dependiente' : 'operaciones dependientes'} y no puede descartarse.`
+        : 'Esta operación no admite descarte.'
+      acciones.append(motivo)
+    }
+    card.append(titulo, detalle, acciones)
+    operacionesError.append(card)
+  }
+}
+
+async function mostrarSesionesActivas() {
+  const sesiones = await obtenerSesionesActivas(operador.dni)
+  sesionesRestaurables.replaceChildren()
+  sesionesRestaurables.classList.toggle('oculto', !sesiones.length)
+  if (!sesiones.length) return
+  const titulo = document.createElement('h2')
+  titulo.textContent = 'Sesiones de lectura activas'
+  sesionesRestaurables.append(titulo)
+  for (const sesion of sesiones) {
+    const fila = document.createElement('div')
+    fila.className = 'card'
+    const descripcion = document.createElement('p')
+    descripcion.textContent = `${sesion.jabero} · ${sesion.lote_codigo} · ${sesion.variedad}`
+    const total = document.createElement('p')
+    total.textContent = `${await contarLecturasSesion(sesion.id)} jabas locales`
+    const continuar = document.createElement('button')
+    continuar.textContent = 'Continuar lectura'
+    continuar.addEventListener('click', async () => {
+      sesionLectura = sesion
+      mostrarVista(vistaLectura)
+      await mostrarSesionLectura()
+    })
+    const finalizar = document.createElement('button')
+    finalizar.className = 'boton-finalizar'
+    finalizar.textContent = 'Finalizar sesión'
+    finalizar.addEventListener('click', async () => {
+      if (!window.confirm('¿Finalizar la sesión de lectura?')) return
+      sesionLectura = sesion
+      await finalizarSesionLectura()
+    })
+    fila.append(descripcion, total, continuar, finalizar)
+    sesionesRestaurables.append(fila)
+  }
+}
 
 // CERRAR SESIÓN
 
@@ -233,17 +363,11 @@ formTicket.addEventListener('submit', async (event) => {
       return
     }
 
-    const operacion = await agregarOperacion('ASIGNAR_TICKET', {
-      dniOperador: operador.dni,
-      dniCosechador: cosechador.dni,
-      codigoTicket
-    })
-
-    await guardarTicketLocal({
+    await guardarAsignacionOffline({
       codigoTicket,
       cosechadorDni: cosechador.dni,
       cosechador: cosechador.nombre,
-      operacionId: operacion.id
+      dniOperador: operador.dni
     })
   } catch (error) {
     mostrarResultado(error.message, 'error')
@@ -254,7 +378,7 @@ formTicket.addEventListener('submit', async (event) => {
 
   mostrarResultado(
     navigator.onLine
-      ? `✓ Ticket ${codigoTicket} registrado`
+      ? `✓ Ticket ${codigoTicket} guardado · sincronización pendiente`
       : `✓ Ticket ${codigoTicket} guardado sin conexión`,
     'exito'
   )
@@ -293,13 +417,12 @@ formJabero.addEventListener('submit', async (event) => {
       throw new Error('El trabajador ya está registrado como jabero.')
     }
 
-    await agregarRolTrabajador(dni, 'JABERO')
-    await agregarOperacion('REGISTRAR_JABERO', {
-      dniOperador: operador.dni,
-      dniTrabajador: dni
-    })
+    await registrarJaberoOffline(operador.dni, dni)
 
-    mostrarResultadoJabero(`✓ ${trabajador.nombre} registrado como jabero`, 'exito')
+    mostrarResultadoJabero(
+      `✓ ${trabajador.nombre} guardado como jabero · sincronización pendiente`,
+      'exito'
+    )
     dniJaberoInput.value = ''
     dniJaberoInput.focus()
   } catch (error) {
@@ -326,6 +449,7 @@ function mostrarVista(vista) {
   vistaAsignacion.classList.add('oculto')
   vistaJaberos.classList.add('oculto')
   vistaLectura.classList.add('oculto')
+  vistaSync.classList.add('oculto')
   vista.classList.remove('oculto')
 }
 
@@ -333,6 +457,7 @@ function mostrarMenu() {
   mostrarVista(vistaMenu)
   menuOperador.textContent = operador.nombre
   actualizarEstadoConexion()
+  mostrarSesionesActivas().catch(console.error)
 }
 
 // ASIGNACIÓN - UI
@@ -431,6 +556,8 @@ async function restaurarSesion() {
   try {
     operador = await validarOperador(dni)
     mostrarMenu()
+    if (navigator.onLine)
+      sincronizarPendientes().then(actualizarEstadoConexion).catch(console.error)
   } catch {
     sessionStorage.removeItem('operador_dni')
   }
@@ -493,6 +620,15 @@ formIniciarLectura.addEventListener('submit', async (event) => {
     if (!trabajador.roles?.includes('JABERO')) {
       throw new Error('El trabajador no está registrado como jabero.')
     }
+    if (trabajador.estado_sync_jabero === 'ERROR') {
+      throw new Error(
+        'El registro de este jabero fue rechazado. Revise sincronización.'
+      )
+    }
+    const existente = await obtenerSesionActivaJabero(dni)
+    if (existente) {
+      throw new Error('El jabero ya tiene una sesión activa. Continúe esa sesión.')
+    }
 
     const lotes = await obtenerLotes()
     const lote = lotes.find((item) => item.lote_id === loteId)
@@ -508,20 +644,15 @@ formIniciarLectura.addEventListener('submit', async (event) => {
       lote_codigo: lote.codigo,
       variedad: lote.variedad,
       dni_jabero: dni,
+      dni_operador: operador.dni,
       estado: 'ACTIVA',
       fecha_inicio: new Date().toISOString()
     }
 
-    await guardarSesionLocal({ id: sesionId, ...sesion })
-    await agregarOperacion('INICIAR_SESION', {
-      dniOperador: operador.dni,
-      dniJabero: dni,
-      loteId,
-      sesionId
-    })
+    await iniciarSesionOffline({ id: sesionId, ...sesion }, operador.dni)
 
     sesionLectura = sesion
-    mostrarSesionLectura()
+    await mostrarSesionLectura()
   } catch (error) {
     mostrarMensajeLectura(error.message, 'error')
     dniJaberoLectura.select()
@@ -549,6 +680,23 @@ formLecturaTicket.addEventListener('submit', async (event) => {
   }
   ticketLectura.disabled = true
   try {
+    const jabero = await obtenerTrabajador(sesionLectura.dni_jabero)
+    if (jabero?.estado_sync_jabero === 'ERROR') {
+      throw new Error(
+        'El registro de este jabero fue rechazado. Revise sincronización.'
+      )
+    }
+    const operacionesSesion = await obtenerColaCompleta()
+    if (
+      operacionesSesion.some(
+        (item) =>
+          item.tipo === 'INICIAR_SESION' &&
+          item.payload.sesionId === sesionLectura.sesion_id &&
+          item.estado === 'ERROR'
+      )
+    ) {
+      throw new Error('El inicio de esta sesión fue rechazado. Revise sincronización.')
+    }
     const ticket = await obtenerTicket(codigo)
     if (!ticket) {
       throw new Error('El ticket no está asignado a ningún cosechador.')
@@ -559,22 +707,18 @@ formLecturaTicket.addEventListener('submit', async (event) => {
 
     const lecturaId = crypto.randomUUID()
     const fechaHora = new Date().toISOString()
-    await guardarLecturaLocal({
-      id: lecturaId,
-      sesion_id: sesionLectura.sesion_id,
-      codigo_ticket: codigo,
-      cosechador_dni: ticket.cosechador_dni,
-      cosechador: ticket.cosechador,
-      fecha_hora: fechaHora,
-      estado_sync: 'PENDIENTE'
-    })
-    await agregarOperacion('REGISTRAR_JABA', {
-      dniOperador: operador.dni,
-      sesionId: sesionLectura.sesion_id,
-      codigoTicket: codigo,
-      lecturaId,
-      fechaHora
-    })
+    await registrarLecturaOffline(
+      {
+        id: lecturaId,
+        sesion_id: sesionLectura.sesion_id,
+        codigo_ticket: codigo,
+        cosechador_dni: ticket.cosechador_dni,
+        cosechador: ticket.cosechador,
+        fecha_hora: fechaHora,
+        estado_sync: 'PENDIENTE'
+      },
+      operador.dni
+    )
 
     const total = await contarLecturasSesion(sesionLectura.sesion_id)
     const totalPersona = await contarLecturasCosechador(
@@ -641,11 +785,7 @@ btnVolverMenuLectura.addEventListener('click', async () => {
 
 async function finalizarSesionLectura() {
   const sesionId = sesionLectura.sesion_id
-  await cerrarSesionLocal(sesionId)
-  await agregarOperacion('CERRAR_SESION', {
-    dniOperador: operador.dni,
-    sesionId
-  })
+  await finalizarSesionOffline(sesionId, operador.dni)
 
   sesionLectura = null
   mostrarMenu()
@@ -660,14 +800,17 @@ async function finalizarSesionLectura() {
   await actualizarEstadoConexion()
 }
 
-function mostrarSesionLectura() {
+async function mostrarSesionLectura() {
   configuracionLectura.classList.add('oculto')
   sesionLecturaActiva.classList.remove('oculto')
   sesionJabero.textContent = sesionLectura.jabero
   sesionLote.textContent = sesionLectura.lote_codigo
   sesionVariedad.textContent = sesionLectura.variedad
-  totalSesion.textContent = '0'
-  totalCosechador.textContent = '0'
+  totalSesion.textContent = await contarLecturasSesion(sesionLectura.sesion_id)
+  const ultima = await obtenerUltimaLecturaSesion(sesionLectura.sesion_id)
+  totalCosechador.textContent = ultima
+    ? await contarLecturasCosechador(sesionLectura.sesion_id, ultima.cosechador_dni)
+    : '0'
   ticketLectura.value = ''
   ticketLectura.focus()
 }
