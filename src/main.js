@@ -26,6 +26,10 @@ import {
 import { sincronizarPendientes } from './offline/sync'
 import { evaluarDescarteOperacion } from './offline/cola'
 import { configurarTecladoManual } from './modules/tecladoManual'
+import {
+  mostrarContadorCosechador,
+  mostrarSesionLecturaEnVista
+} from './modules/vistaSesionLectura'
 
 // VISTAS
 
@@ -92,6 +96,7 @@ const formLecturaTicket = document.querySelector('#form-lectura-ticket')
 const ticketLectura = document.querySelector('#ticket-lectura')
 const resultadoLectura = document.querySelector('#resultado-lectura')
 const totalSesion = document.querySelector('#total-sesion')
+const etiquetaCosechador = document.querySelector('#etiqueta-cosechador')
 const totalCosechador = document.querySelector('#total-cosechador')
 const btnFinalizarLectura = document.querySelector('#btn-finalizar-lectura')
 const mensajeModuloLectura = document.querySelector('#mensaje-modulo-lectura')
@@ -764,7 +769,10 @@ formLecturaTicket.addEventListener('submit', async (event) => {
     resultadoLectura.textContent = `✓ +1 jaba — ${ticket.cosechador}`
     resultadoLectura.className = 'resultado exito'
     totalSesion.textContent = total
-    totalCosechador.textContent = totalPersona
+    mostrarContadorCosechador(ticket.cosechador, totalPersona, {
+      etiquetaCosechador,
+      totalCosechador
+    })
     ticketLectura.value = ''
     ticketLectura.disabled = false
     desactivarTecladoManual(ticketLectura)
@@ -839,18 +847,28 @@ async function finalizarSesionLectura() {
 
 async function mostrarSesionLectura() {
   desactivarTecladoManual()
-  configuracionLectura.classList.add('oculto')
-  sesionLecturaActiva.classList.remove('oculto')
-  sesionJabero.textContent = sesionLectura.jabero
-  sesionLote.textContent = sesionLectura.lote_codigo
-  sesionVariedad.textContent = sesionLectura.variedad
-  totalSesion.textContent = await contarLecturasSesion(sesionLectura.sesion_id)
-  const ultima = await obtenerUltimaLecturaSesion(sesionLectura.sesion_id)
-  totalCosechador.textContent = ultima
-    ? await contarLecturasCosechador(sesionLectura.sesion_id, ultima.cosechador_dni)
-    : '0'
-  ticketLectura.value = ''
-  ticketLectura.focus()
+  await mostrarSesionLecturaEnVista(
+    sesionLectura,
+    {
+      configuracionLectura,
+      sesionLecturaActiva,
+      sesionJabero,
+      sesionLote,
+      sesionVariedad,
+      totalSesion,
+      etiquetaCosechador,
+      totalCosechador,
+      mensajeModuloLectura,
+      ticketLectura
+    },
+    {
+      contarLecturasSesion,
+      obtenerUltimaLecturaSesion,
+      contarLecturasCosechador,
+      obtenerTicket,
+      obtenerTrabajador
+    }
+  )
 }
 
 function mostrarMensajeLectura(mensaje, tipo) {
@@ -866,7 +884,8 @@ function limpiarModuloLectura() {
   dniJaberoLectura.value = ''
   ticketLectura.value = ''
   resultadoLectura.className = 'resultado oculto'
+  mensajeModuloLectura.textContent = ''
   mensajeModuloLectura.className = 'resultado oculto'
   totalSesion.textContent = '0'
-  totalCosechador.textContent = '0'
+  mostrarContadorCosechador(null, 0, { etiquetaCosechador, totalCosechador })
 }
