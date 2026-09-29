@@ -4,7 +4,7 @@ export async function listarLotesActivos() {
   const { data, error } = await supabase.rpc('listar_lotes_activos')
 
   if (error) {
-    throw new Error(error.message)
+    throw error
   }
 
   return data
@@ -24,7 +24,7 @@ export async function iniciarSesionLectura({
   })
 
   if (error) {
-    throw new Error(error.message)
+    throw error
   }
 
   return data
@@ -35,31 +35,34 @@ export async function registrarLecturaJaba({
   sesionId,
   codigoTicket,
   lecturaId = crypto.randomUUID(),
-  fechaHora = new Date().toISOString()
+  fechaHora = new Date().toISOString(),
+  operacionId
 }) {
   const { data, error } = await supabase.rpc('registrar_lectura_jaba', {
     p_dni_operador: dniOperador,
     p_sesion_id: sesionId,
     p_codigo_ticket: codigoTicket,
     p_lectura_id: lecturaId,
-    p_fecha_hora: fechaHora
+    p_fecha_hora: fechaHora,
+    p_operacion_id: operacionId
   })
 
   if (error) {
-    throw new Error(error.message)
+    throw error
   }
 
   return data
 }
 
-export async function cerrarSesionLectura({ dniOperador, sesionId }) {
+export async function cerrarSesionLectura({ dniOperador, sesionId, operacionId }) {
   const { data, error } = await supabase.rpc('cerrar_sesion_lectura', {
     p_dni_operador: dniOperador,
-    p_sesion_id: sesionId
+    p_sesion_id: sesionId,
+    p_operacion_id: operacionId
   })
 
   if (error) {
-    throw new Error(error.message)
+    throw error
   }
 
   return data

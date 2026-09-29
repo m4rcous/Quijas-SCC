@@ -189,11 +189,32 @@ button {
 }
 
 .estado-conexion {
+  width: auto;
+  margin: 0;
+  border: 0;
+  cursor: pointer;
   font-size: 13px;
   font-weight: 700;
   padding: 7px 10px;
   border-radius: 999px;
   white-space: nowrap;
+}
+
+.acciones-sync {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.acciones-sync button {
+  width: auto;
+}
+.acciones-sync .detalle-sync {
+  flex-basis: 100%;
+  margin: 0;
+}
+.detalle-sync {
+  overflow-wrap: anywhere;
+  color: #667085;
 }
 
 .estado-conexion.online {

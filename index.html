@@ -51,14 +51,15 @@
           </div>
 
           <div class="menu-topbar-acciones">
-            <div
+            <button
               id="estado-conexion"
               class="estado-conexion online"
-              role="status"
+              type="button"
+              aria-label="Ver estado de sincronización"
               aria-live="polite"
             >
               ● En línea
-            </div>
+            </button>
 
             <button id="btn-salir-menu" class="boton-secundario">Salir</button>
           </div>
@@ -70,6 +71,7 @@
 
             <p>Seleccione una operación</p>
           </div>
+          <div id="sesiones-restaurables" class="card oculto"></div>
 
           <div class="menu-grid">
             <button id="btn-menu-asignacion" class="menu-card">
@@ -98,6 +100,18 @@
               <span class="menu-descripcion">Registrar jabas mediante tickets</span>
             </button>
           </div>
+        </div>
+      </section>
+
+      <section id="vista-sync" class="pantalla oculto">
+        <header class="topbar">
+          <button id="btn-volver-sync" class="boton-volver">← Menú</button>
+          <strong>Sincronización</strong>
+        </header>
+        <div class="contenido">
+          <h1>Estado de sincronización</h1>
+          <p id="resumen-sync"></p>
+          <div id="operaciones-error"></div>
         </div>
       </section>
 

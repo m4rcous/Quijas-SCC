@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "format": "prettier --write index.html src",
     "format:check": "prettier --check index.html src",
-    "test": "node --test"
+    "test": "node --test",
+    "exportar:proyecto": "node scripts/exportar-proyecto.js"
   },
   "devDependencies": {
     "fake-indexeddb": "^6.2.5",
