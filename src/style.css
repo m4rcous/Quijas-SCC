@@ -125,6 +125,41 @@ input:focus {
   border-color: #1668c7;
 }
 
+.campo-con-teclado {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+
+.campo-con-teclado input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 0;
+}
+
+.campo-con-teclado .btn-teclado {
+  flex: 0 0 48px;
+  width: 48px;
+  min-height: 48px;
+  margin: 0;
+  padding: 0;
+  background: #eef2f6;
+  color: #344054;
+  font-size: 24px;
+  border: 2px solid transparent;
+}
+
+.campo-con-teclado .btn-teclado.activo {
+  background: #e7f0fb;
+  color: #1668c7;
+  border-color: #1668c7;
+}
+
+.campo-con-teclado .btn-teclado:disabled {
+  cursor: default;
+}
+
 button {
   width: 100%;
 

@@ -23,15 +23,26 @@
           <form id="form-login">
             <label for="dni-operador">DNI del operador</label>
 
-            <input
-              id="dni-operador"
-              type="text"
-              inputmode="numeric"
-              maxlength="8"
-              autocomplete="off"
-              placeholder="Escanee el DNI"
-              autofocus
-            />
+            <div class="campo-con-teclado">
+              <input
+                id="dni-operador"
+                type="text"
+                inputmode="none"
+                maxlength="8"
+                autocomplete="off"
+                placeholder="Escanee el DNI"
+                autofocus
+              />
+              <button
+                type="button"
+                class="btn-teclado"
+                aria-label="Mostrar teclado"
+                aria-pressed="false"
+                aria-controls="dni-operador"
+              >
+                ⌨
+              </button>
+            </div>
 
             <button type="submit">Ingresar</button>
           </form>
@@ -149,15 +160,26 @@
             </div>
 
             <form id="form-cosechador">
-              <input
-                id="dni-cosechador"
-                class="input-grande"
-                type="text"
-                inputmode="numeric"
-                maxlength="8"
-                autocomplete="off"
-                placeholder="Escanee DNI"
-              />
+              <div class="campo-con-teclado">
+                <input
+                  id="dni-cosechador"
+                  class="input-grande"
+                  type="text"
+                  inputmode="none"
+                  maxlength="8"
+                  autocomplete="off"
+                  placeholder="Escanee DNI"
+                />
+                <button
+                  type="button"
+                  class="btn-teclado"
+                  aria-label="Mostrar teclado"
+                  aria-pressed="false"
+                  aria-controls="dni-cosechador"
+                >
+                  ⌨
+                </button>
+              </div>
             </form>
 
             <div id="info-cosechador" class="resultado-persona oculto">
@@ -185,14 +207,27 @@
             </div>
 
             <form id="form-ticket">
-              <input
-                id="codigo-ticket"
-                class="input-grande"
-                type="text"
-                autocomplete="off"
-                placeholder="Escanee ticket"
-                disabled
-              />
+              <div class="campo-con-teclado">
+                <input
+                  id="codigo-ticket"
+                  class="input-grande"
+                  type="text"
+                  inputmode="none"
+                  autocomplete="off"
+                  placeholder="Escanee ticket"
+                  disabled
+                />
+                <button
+                  type="button"
+                  class="btn-teclado"
+                  aria-label="Mostrar teclado"
+                  aria-pressed="false"
+                  aria-controls="codigo-ticket"
+                  disabled
+                >
+                  ⌨
+                </button>
+              </div>
             </form>
           </div>
 
@@ -232,15 +267,26 @@
             </div>
 
             <form id="form-jabero">
-              <input
-                id="dni-jabero"
-                class="input-grande"
-                type="text"
-                inputmode="numeric"
-                maxlength="8"
-                autocomplete="off"
-                placeholder="Escanee DNI"
-              />
+              <div class="campo-con-teclado">
+                <input
+                  id="dni-jabero"
+                  class="input-grande"
+                  type="text"
+                  inputmode="none"
+                  maxlength="8"
+                  autocomplete="off"
+                  placeholder="Escanee DNI"
+                />
+                <button
+                  type="button"
+                  class="btn-teclado"
+                  aria-label="Mostrar teclado"
+                  aria-pressed="false"
+                  aria-controls="dni-jabero"
+                >
+                  ⌨
+                </button>
+              </div>
             </form>
           </div>
 
@@ -299,15 +345,26 @@
               </div>
 
               <form id="form-iniciar-lectura">
-                <input
-                  id="dni-jabero-lectura"
-                  class="input-grande"
-                  type="text"
-                  inputmode="numeric"
-                  maxlength="8"
-                  autocomplete="off"
-                  placeholder="Escanee DNI"
-                />
+                <div class="campo-con-teclado">
+                  <input
+                    id="dni-jabero-lectura"
+                    class="input-grande"
+                    type="text"
+                    inputmode="none"
+                    maxlength="8"
+                    autocomplete="off"
+                    placeholder="Escanee DNI"
+                  />
+                  <button
+                    type="button"
+                    class="btn-teclado"
+                    aria-label="Mostrar teclado"
+                    aria-pressed="false"
+                    aria-controls="dni-jabero-lectura"
+                  >
+                    ⌨
+                  </button>
+                </div>
 
                 <button type="submit">Iniciar lectura</button>
               </form>
@@ -347,13 +404,25 @@
               </div>
 
               <form id="form-lectura-ticket">
-                <input
-                  id="ticket-lectura"
-                  class="input-grande"
-                  type="text"
-                  autocomplete="off"
-                  placeholder="Escanee ticket"
-                />
+                <div class="campo-con-teclado">
+                  <input
+                    id="ticket-lectura"
+                    class="input-grande"
+                    type="text"
+                    inputmode="none"
+                    autocomplete="off"
+                    placeholder="Escanee ticket"
+                  />
+                  <button
+                    type="button"
+                    class="btn-teclado"
+                    aria-label="Mostrar teclado"
+                    aria-pressed="false"
+                    aria-controls="ticket-lectura"
+                  >
+                    ⌨
+                  </button>
+                </div>
               </form>
 
               <div id="resultado-lectura" class="resultado oculto"></div>

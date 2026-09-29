@@ -25,6 +25,7 @@ import {
 } from './offline/db'
 import { sincronizarPendientes } from './offline/sync'
 import { evaluarDescarteOperacion } from './offline/cola'
+import { configurarTecladoManual } from './modules/tecladoManual'
 
 // VISTAS
 
@@ -95,6 +96,29 @@ const totalCosechador = document.querySelector('#total-cosechador')
 const btnFinalizarLectura = document.querySelector('#btn-finalizar-lectura')
 const mensajeModuloLectura = document.querySelector('#mensaje-modulo-lectura')
 
+const tecladosManuales = new Map(
+  [
+    [dniOperadorInput, 'numeric'],
+    [dniCosechadorInput, 'numeric'],
+    [codigoTicketInput, 'text'],
+    [dniJaberoInput, 'numeric'],
+    [dniJaberoLectura, 'numeric'],
+    [ticketLectura, 'text']
+  ].map(([input, modo]) => [
+    input,
+    configurarTecladoManual(
+      input,
+      input.parentElement.querySelector('.btn-teclado'),
+      modo
+    )
+  ])
+)
+
+function desactivarTecladoManual(...inputs) {
+  const campos = inputs.length ? inputs : tecladosManuales.keys()
+  for (const input of campos) tecladosManuales.get(input)()
+}
+
 // ESTADO
 
 let operador = null
@@ -144,6 +168,7 @@ formLogin.addEventListener('submit', async (event) => {
         console.error('No se pudo actualizar el caché:', error)
       }
     }
+    desactivarTecladoManual(dniOperadorInput)
     mostrarMenu()
     if (navigator.onLine)
       sincronizarPendientes().then(actualizarEstadoConexion).catch(console.error)
@@ -328,6 +353,7 @@ formCosechador.addEventListener('submit', async (event) => {
     nombreCosechador.textContent = cosechador.nombre
     campaniaCosechador.textContent = cosechador.campania
     infoCosechador.classList.remove('oculto')
+    desactivarTecladoManual(dniCosechadorInput)
     habilitarTicket()
   } catch (error) {
     cosechador = null
@@ -382,6 +408,7 @@ formTicket.addEventListener('submit', async (event) => {
       : `✓ Ticket ${codigoTicket} guardado sin conexión`,
     'exito'
   )
+  desactivarTecladoManual(codigoTicketInput)
   setTimeout(prepararSiguienteCosechador, 1200)
   await actualizarEstadoConexion()
 
@@ -424,6 +451,7 @@ formJabero.addEventListener('submit', async (event) => {
       'exito'
     )
     dniJaberoInput.value = ''
+    desactivarTecladoManual(dniJaberoInput)
     dniJaberoInput.focus()
   } catch (error) {
     mostrarResultadoJabero(error.message, 'error')
@@ -444,6 +472,7 @@ formJabero.addEventListener('submit', async (event) => {
 // NAVEGACIÓN
 
 function mostrarVista(vista) {
+  desactivarTecladoManual()
   vistaLogin.classList.add('oculto')
   vistaMenu.classList.add('oculto')
   vistaAsignacion.classList.add('oculto')
@@ -465,18 +494,22 @@ function mostrarMenu() {
 function habilitarTicket() {
   cardTicket.classList.remove('deshabilitado')
   codigoTicketInput.disabled = false
+  codigoTicketInput.parentElement.querySelector('.btn-teclado').disabled = false
   codigoTicketInput.value = ''
   codigoTicketInput.focus()
 }
 
 function deshabilitarTicket() {
+  desactivarTecladoManual(codigoTicketInput)
   cardTicket.classList.add('deshabilitado')
   codigoTicketInput.disabled = true
+  codigoTicketInput.parentElement.querySelector('.btn-teclado').disabled = true
   codigoTicketInput.value = ''
   infoCosechador.classList.add('oculto')
 }
 
 function prepararSiguienteCosechador() {
+  desactivarTecladoManual()
   cosechador = null
   dniCosechadorInput.value = ''
   infoCosechador.classList.add('oculto')
@@ -485,6 +518,7 @@ function prepararSiguienteCosechador() {
 }
 
 function limpiarAsignacion() {
+  desactivarTecladoManual()
   cosechador = null
   dniCosechadorInput.value = ''
   codigoTicketInput.value = ''
@@ -577,6 +611,7 @@ function limpiarResultadoJabero() {
 }
 
 function limpiarRegistroJabero() {
+  desactivarTecladoManual(dniJaberoInput)
   dniJaberoInput.value = ''
   limpiarResultadoJabero()
 }
@@ -652,6 +687,7 @@ formIniciarLectura.addEventListener('submit', async (event) => {
     await iniciarSesionOffline({ id: sesionId, ...sesion }, operador.dni)
 
     sesionLectura = sesion
+    desactivarTecladoManual(dniJaberoLectura)
     await mostrarSesionLectura()
   } catch (error) {
     mostrarMensajeLectura(error.message, 'error')
@@ -731,6 +767,7 @@ formLecturaTicket.addEventListener('submit', async (event) => {
     totalCosechador.textContent = totalPersona
     ticketLectura.value = ''
     ticketLectura.disabled = false
+    desactivarTecladoManual(ticketLectura)
     ticketLectura.focus()
   } catch (error) {
     resultadoLectura.textContent = error.message
@@ -801,6 +838,7 @@ async function finalizarSesionLectura() {
 }
 
 async function mostrarSesionLectura() {
+  desactivarTecladoManual()
   configuracionLectura.classList.add('oculto')
   sesionLecturaActiva.classList.remove('oculto')
   sesionJabero.textContent = sesionLectura.jabero
@@ -821,6 +859,7 @@ function mostrarMensajeLectura(mensaje, tipo) {
 }
 
 function limpiarModuloLectura() {
+  desactivarTecladoManual()
   sesionLectura = null
   configuracionLectura.classList.remove('oculto')
   sesionLecturaActiva.classList.add('oculto')
