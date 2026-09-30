@@ -188,6 +188,12 @@
               ></span>
               <span class="home-action-tile__title">Producción por día</span>
             </button>
+            <button id="btn-reporte-lotes" class="home-action-tile">
+              <span class="home-action-tile__icon home-action-tile__icon--harvest"
+                ><svg><use href="#icon-crate"></use></svg
+              ></span>
+              <span class="home-action-tile__title">Producción por lote</span>
+            </button>
           </div>
         </div>
       </section>
@@ -325,6 +331,88 @@
               <strong>Aún no hay producción registrada en esta campaña.</strong>
               <p>Las lecturas sincronizadas aparecerán aquí.</p>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="vista-produccion-lotes" class="pantalla pantalla-datos oculto">
+        <header class="app-header">
+          <button
+            id="btn-volver-lotes"
+            class="icon-button btn-secondary"
+            aria-label="Volver a reportes"
+          >
+            <svg aria-hidden="true"><use href="#icon-arrow-left"></use></svg>
+          </button>
+          <div class="app-header__title">Producción por lote</div>
+          <span class="app-header__spacer"></span>
+        </header>
+        <div class="contenido contenido-datos">
+          <div class="titulo-pagina titulo-pagina--datos">
+            <p class="eyebrow">Reporte global</p>
+            <h1>Producción por lote</h1>
+            <p id="lotes-campania">Campaña activa</p>
+          </div>
+          <div class="filter-bar">
+            <label class="search-field" for="lotes-busqueda">
+              <svg aria-hidden="true"><use href="#icon-search"></use></svg>
+              <input
+                id="lotes-busqueda"
+                type="search"
+                placeholder="Buscar lote o variedad..."
+              />
+            </label>
+            <button
+              id="btn-actualizar-lotes"
+              type="button"
+              class="icon-button btn-secondary"
+              aria-label="Actualizar producción por lote"
+              title="Actualizar"
+            >
+              <svg aria-hidden="true"><use href="#icon-refresh"></use></svg>
+            </button>
+          </div>
+          <div
+            class="filter-chips filter-chips--wrap lotes-order"
+            aria-label="Ordenar lotes"
+          >
+            <button
+              id="btn-orden-lotes-jabas"
+              type="button"
+              class="filter-chip selected"
+              aria-pressed="true"
+            >
+              Más jabas
+            </button>
+            <button
+              id="btn-orden-lotes-az"
+              type="button"
+              class="filter-chip"
+              aria-pressed="false"
+            >
+              A–Z
+            </button>
+          </div>
+          <p id="lotes-resumen" class="consulta-contador oculto" aria-live="polite"></p>
+          <div
+            id="lotes-feedback"
+            class="resultado ranking-feedback oculto"
+            aria-live="polite"
+          ></div>
+          <button
+            id="btn-reintentar-lotes"
+            type="button"
+            class="btn-secondary reporte-retry oculto"
+          >
+            Reintentar
+          </button>
+          <div id="lotes-lista" class="lotes-lista" aria-live="polite"></div>
+          <div id="lotes-empty" class="empty-state oculto">
+            <span class="empty-state__icon"
+              ><svg aria-hidden="true"><use href="#icon-search"></use></svg
+            ></span>
+            <strong>Aún no hay producción por lote en esta campaña.</strong>
+            <p>Las lecturas sincronizadas aparecerán aquí.</p>
           </div>
         </div>
       </section>

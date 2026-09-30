@@ -1247,6 +1247,117 @@ select:disabled {
   line-height: 1.1;
 }
 
+.lotes-order {
+  margin-bottom: var(--space-3);
+}
+
+.lotes-lista {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.lote-report-card {
+  min-width: 0;
+  padding: var(--space-4);
+  overflow: hidden;
+  border: 1px solid var(--color-line-200);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-100);
+}
+
+.lote-report-card__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.lote-report-card__identity,
+.lote-report-card__production,
+.lote-report-card__metric {
+  min-width: 0;
+}
+
+.lote-report-card__identity strong,
+.lote-report-card__identity span,
+.lote-report-card__production strong,
+.lote-report-card__production span,
+.lote-report-card__metric span,
+.lote-report-card__metric strong {
+  display: block;
+}
+
+.lote-report-card__identity strong {
+  overflow-wrap: anywhere;
+  font-size: var(--font-size-lg);
+  line-height: 1.15;
+}
+
+.lote-report-card__identity span {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  color: var(--color-ink-600);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.lote-report-card__production {
+  text-align: right;
+}
+
+.lote-report-card__production strong {
+  font-size: 2rem;
+  line-height: 0.95;
+  font-variant-numeric: tabular-nums;
+}
+
+.lote-report-card__production span {
+  margin-top: 4px;
+  color: var(--color-ink-600);
+  font-size: 0.74rem;
+  font-weight: 750;
+}
+
+.lote-report-card__name {
+  margin: var(--space-2) 0 0;
+  overflow-wrap: anywhere;
+  color: var(--color-ink-700);
+  font-size: var(--font-size-sm);
+}
+
+.lote-report-card__metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-line-200);
+}
+
+.lote-report-card__metric {
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-150);
+}
+
+.lote-report-card__metric:last-child {
+  grid-column: 1 / -1;
+}
+
+.lote-report-card__metric span {
+  color: var(--color-ink-600);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.lote-report-card__metric strong {
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
 .industrial-table__row--interactive {
   cursor: pointer;
 }

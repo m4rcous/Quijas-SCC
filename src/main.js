@@ -77,6 +77,16 @@ import {
   reemplazarProduccionDiaria,
   resumirProduccionDiaria
 } from './modules/produccionDiaria'
+import {
+  ORDEN_PRODUCCION_LOTES,
+  buscarProduccionLotes,
+  esErrorConexionProduccionLotes,
+  formatearUltimaLecturaLote,
+  obtenerProduccionLotes,
+  ordenarProduccionLotes,
+  reemplazarProduccionLotes,
+  resumirProduccionLotes
+} from './modules/produccionLotes'
 
 // VISTAS
 
@@ -90,6 +100,7 @@ const vistaConsulta = document.querySelector('#vista-consulta')
 const vistaReportes = document.querySelector('#vista-reportes')
 const vistaRankingCosechadores = document.querySelector('#vista-ranking-cosechadores')
 const vistaProduccionDiaria = document.querySelector('#vista-produccion-diaria')
+const vistaProduccionLotes = document.querySelector('#vista-produccion-lotes')
 const sesionesRestaurables = document.querySelector('#sesiones-restaurables')
 const resumenSync = document.querySelector('#resumen-sync')
 const operacionesError = document.querySelector('#operaciones-error')
@@ -131,6 +142,18 @@ const produccionResumen = document.querySelector('#produccion-resumen')
 const produccionFeedback = document.querySelector('#produccion-feedback')
 const produccionTablaBody = document.querySelector('#produccion-tabla-body')
 const produccionEmpty = document.querySelector('#produccion-empty')
+const btnReporteLotes = document.querySelector('#btn-reporte-lotes')
+const btnVolverLotes = document.querySelector('#btn-volver-lotes')
+const btnActualizarLotes = document.querySelector('#btn-actualizar-lotes')
+const btnReintentarLotes = document.querySelector('#btn-reintentar-lotes')
+const btnOrdenLotesJabas = document.querySelector('#btn-orden-lotes-jabas')
+const btnOrdenLotesAz = document.querySelector('#btn-orden-lotes-az')
+const lotesCampania = document.querySelector('#lotes-campania')
+const lotesBusqueda = document.querySelector('#lotes-busqueda')
+const lotesResumen = document.querySelector('#lotes-resumen')
+const lotesFeedback = document.querySelector('#lotes-feedback')
+const lotesLista = document.querySelector('#lotes-lista')
+const lotesEmpty = document.querySelector('#lotes-empty')
 
 // ASIGNACIÓN
 
@@ -284,6 +307,9 @@ let filtroSesionesLectura = FILTROS_SESIONES_LECTURA.TODAS
 let rankingCosechadoresActual = []
 let produccionDiariaActual = []
 let produccionDiariaCampaniaActual = ''
+let produccionLotesActual = []
+let produccionLotesCampaniaActual = ''
+let ordenProduccionLotes = ORDEN_PRODUCCION_LOTES.MAS_JABAS
 
 const tecladosManuales = new Map(
   [
@@ -1235,6 +1261,176 @@ function ocultarFeedbackProduccion() {
   btnReintentarProduccion.classList.add('oculto')
 }
 
+async function abrirProduccionLotes() {
+  lotesBusqueda.value = ''
+  ordenProduccionLotes = ORDEN_PRODUCCION_LOTES.MAS_JABAS
+  actualizarControlesOrdenLotes()
+  mostrarVista(vistaProduccionLotes)
+
+  if (produccionLotesActual.length > 0) {
+    lotesCampania.textContent = produccionLotesCampaniaActual || 'Campaña activa'
+    renderProduccionLotes()
+  } else {
+    lotesCampania.textContent = 'Campaña activa'
+    lotesResumen.classList.add('oculto')
+    lotesLista.replaceChildren()
+    lotesEmpty.classList.add('oculto')
+  }
+
+  await cargarProduccionLotes()
+  lotesBusqueda.focus()
+}
+
+async function cargarProduccionLotes() {
+  btnActualizarLotes.disabled = true
+  btnReintentarLotes.classList.add('oculto')
+  mostrarFeedbackLotes('Cargando producción por lote…')
+
+  if (!navigator.onLine) {
+    mostrarFeedbackLotes(
+      'No se puede actualizar la producción por lote sin conexión.',
+      'error',
+      true
+    )
+    btnActualizarLotes.disabled = false
+    return
+  }
+
+  try {
+    const respuesta = await obtenerProduccionLotes(operador.dni, (nombre, parametros) =>
+      supabase.rpc(nombre, parametros)
+    )
+    produccionLotesActual = reemplazarProduccionLotes(
+      produccionLotesActual,
+      respuesta.produccion
+    )
+    produccionLotesCampaniaActual = respuesta.campania.nombre || 'Campaña activa'
+    lotesCampania.textContent = produccionLotesCampaniaActual
+    ocultarFeedbackLotes()
+    renderProduccionLotes()
+  } catch (error) {
+    const mensaje = esErrorConexionProduccionLotes(error)
+      ? 'No se puede actualizar la producción por lote sin conexión.'
+      : `No se pudo cargar la producción por lote: ${error.message}`
+    mostrarFeedbackLotes(mensaje, 'error', true)
+
+    if (produccionLotesActual.length === 0) {
+      lotesResumen.classList.add('oculto')
+      lotesLista.replaceChildren()
+      lotesEmpty.classList.add('oculto')
+    }
+  } finally {
+    btnActualizarLotes.disabled = false
+  }
+}
+
+function renderProduccionLotes() {
+  const resumen = resumirProduccionLotes(produccionLotesActual)
+  lotesResumen.textContent = `${formatearNumero(resumen.lotes)} ${
+    resumen.lotes === 1 ? 'lote' : 'lotes'
+  } · ${formatearNumero(resumen.jabas)} ${resumen.jabas === 1 ? 'jaba' : 'jabas'}`
+  lotesResumen.classList.remove('oculto')
+
+  const filtradas = buscarProduccionLotes(produccionLotesActual, lotesBusqueda.value)
+  const filas = ordenarProduccionLotes(filtradas, ordenProduccionLotes)
+  lotesLista.replaceChildren()
+
+  for (const fila of filas) {
+    const articulo = document.createElement('article')
+    articulo.className = 'lote-report-card'
+
+    const cabecera = document.createElement('div')
+    cabecera.className = 'lote-report-card__header'
+
+    const identidad = document.createElement('div')
+    identidad.className = 'lote-report-card__identity'
+    const codigo = document.createElement('strong')
+    codigo.textContent = fila.lote_codigo || 'Lote sin código'
+    const variedad = document.createElement('span')
+    variedad.textContent = fila.variedad || 'Variedad no disponible'
+    identidad.append(codigo, variedad)
+
+    const produccion = document.createElement('div')
+    produccion.className = 'lote-report-card__production'
+    const total = document.createElement('strong')
+    total.textContent = formatearNumero(fila.total_jabas)
+    const unidad = document.createElement('span')
+    unidad.textContent = fila.total_jabas === 1 ? 'jaba' : 'jabas'
+    produccion.append(total, unidad)
+
+    cabecera.append(identidad, produccion)
+    articulo.append(cabecera)
+
+    if (fila.lote_nombre) {
+      const nombre = document.createElement('p')
+      nombre.className = 'lote-report-card__name'
+      nombre.textContent = fila.lote_nombre
+      articulo.append(nombre)
+    }
+
+    const metricas = document.createElement('div')
+    metricas.className = 'lote-report-card__metrics'
+    metricas.append(
+      crearMetricaLote('Cosechadores', formatearNumero(fila.total_cosechadores)),
+      crearMetricaLote('Sesiones', formatearNumero(fila.total_sesiones)),
+      crearMetricaLote('Última', formatearUltimaLecturaLote(fila.ultima_lectura))
+    )
+    articulo.append(metricas)
+    lotesLista.append(articulo)
+  }
+
+  if (filas.length > 0) {
+    lotesEmpty.classList.add('oculto')
+    return
+  }
+
+  const hayBusqueda = lotesBusqueda.value.trim().length > 0
+  lotesEmpty.querySelector('strong').textContent = hayBusqueda
+    ? 'No se encontraron lotes.'
+    : 'Aún no hay producción por lote en esta campaña.'
+  lotesEmpty.querySelector('p').textContent = hayBusqueda
+    ? 'Pruebe con otro lote o variedad.'
+    : 'Las lecturas sincronizadas aparecerán aquí.'
+  lotesEmpty.classList.remove('oculto')
+}
+
+function crearMetricaLote(etiqueta, valor) {
+  const metrica = document.createElement('div')
+  metrica.className = 'lote-report-card__metric'
+  const label = document.createElement('span')
+  label.textContent = etiqueta
+  const contenido = document.createElement('strong')
+  contenido.textContent = valor
+  metrica.append(label, contenido)
+  return metrica
+}
+
+function actualizarControlesOrdenLotes() {
+  const porJabas = ordenProduccionLotes === ORDEN_PRODUCCION_LOTES.MAS_JABAS
+  btnOrdenLotesJabas.classList.toggle('selected', porJabas)
+  btnOrdenLotesJabas.setAttribute('aria-pressed', String(porJabas))
+  btnOrdenLotesAz.classList.toggle('selected', !porJabas)
+  btnOrdenLotesAz.setAttribute('aria-pressed', String(!porJabas))
+}
+
+function cambiarOrdenProduccionLotes(orden) {
+  ordenProduccionLotes = orden
+  actualizarControlesOrdenLotes()
+  renderProduccionLotes()
+}
+
+function mostrarFeedbackLotes(mensaje, tipo = '', permitirReintento = false) {
+  lotesFeedback.textContent = mensaje
+  lotesFeedback.className = `resultado ranking-feedback${tipo ? ` ${tipo}` : ''}`
+  btnReintentarLotes.classList.toggle('oculto', !permitirReintento)
+}
+
+function ocultarFeedbackLotes() {
+  lotesFeedback.textContent = ''
+  lotesFeedback.className = 'resultado ranking-feedback oculto'
+  btnReintentarLotes.classList.add('oculto')
+}
+
 function formatearNumero(valor) {
   return Number(valor || 0).toLocaleString('es-PE')
 }
@@ -1250,6 +1446,15 @@ rankingBusqueda.addEventListener('input', renderRankingCosechadores)
 btnActualizarRanking.addEventListener('click', cargarRankingCosechadores)
 btnActualizarProduccion.addEventListener('click', cargarProduccionDiaria)
 btnReintentarProduccion.addEventListener('click', cargarProduccionDiaria)
+lotesBusqueda.addEventListener('input', renderProduccionLotes)
+btnActualizarLotes.addEventListener('click', cargarProduccionLotes)
+btnReintentarLotes.addEventListener('click', cargarProduccionLotes)
+btnOrdenLotesJabas.addEventListener('click', () =>
+  cambiarOrdenProduccionLotes(ORDEN_PRODUCCION_LOTES.MAS_JABAS)
+)
+btnOrdenLotesAz.addEventListener('click', () =>
+  cambiarOrdenProduccionLotes(ORDEN_PRODUCCION_LOTES.AZ)
+)
 
 window.addEventListener('online', async () => {
   console.log('Conexión recuperada')
@@ -1338,6 +1543,8 @@ btnReporteRanking.addEventListener('click', abrirRankingCosechadores)
 btnVolverRanking.addEventListener('click', () => mostrarVista(vistaReportes))
 btnReporteProduccion.addEventListener('click', abrirProduccionDiaria)
 btnVolverProduccion.addEventListener('click', () => mostrarVista(vistaReportes))
+btnReporteLotes.addEventListener('click', abrirProduccionLotes)
+btnVolverLotes.addEventListener('click', () => mostrarVista(vistaReportes))
 
 estadoConexion.addEventListener('click', mostrarEstadoSync)
 document.querySelector('#btn-volver-sync').addEventListener('click', mostrarMenu)
@@ -1622,6 +1829,7 @@ function mostrarVista(vista) {
   vistaReportes.classList.add('oculto')
   vistaRankingCosechadores.classList.add('oculto')
   vistaProduccionDiaria.classList.add('oculto')
+  vistaProduccionLotes.classList.add('oculto')
   vista.classList.remove('oculto')
 }
 
