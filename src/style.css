@@ -1053,6 +1053,13 @@ select:disabled {
   border-color: var(--color-brand-200);
 }
 
+.consulta-contador {
+  margin: calc(var(--space-2) * -1) 0 var(--space-3);
+  color: var(--color-ink-700);
+  font-size: var(--font-size-sm);
+  font-weight: 750;
+}
+
 .industrial-table-wrap {
   position: relative;
   overflow: hidden;
@@ -1091,6 +1098,57 @@ select:disabled {
 
 .industrial-table__numeric {
   text-align: right !important;
+}
+
+.industrial-table__person strong,
+.industrial-table__person span,
+.industrial-table__ticket strong,
+.industrial-table__ticket .sync-badge {
+  display: block;
+}
+
+.industrial-table__person strong,
+.industrial-table__ticket strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.industrial-table__person span {
+  margin-top: 2px;
+  color: var(--color-ink-600);
+  font-size: 0.76rem;
+  line-height: 1.2;
+}
+
+.industrial-table__ticket .sync-badge {
+  width: max-content;
+  max-width: 100%;
+  margin-top: 4px;
+}
+
+.industrial-table__time {
+  color: var(--color-ink-700);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sync-badge {
+  padding: 3px 7px;
+  border-radius: var(--radius-round);
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.sync-badge--pending {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-fg);
+}
+
+.sync-badge--error {
+  background: var(--color-error-bg);
+  color: var(--color-error-fg);
 }
 
 .empty-state {
@@ -1346,6 +1404,21 @@ select:disabled {
   .industrial-table th,
   .industrial-table td {
     padding-inline: var(--space-2);
+  }
+
+  .industrial-table th:first-child,
+  .industrial-table td:first-child {
+    width: 50%;
+  }
+
+  .industrial-table th:nth-child(2),
+  .industrial-table td:nth-child(2) {
+    width: 30%;
+  }
+
+  .industrial-table th:last-child,
+  .industrial-table td:last-child {
+    width: 20%;
   }
 }
 

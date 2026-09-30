@@ -10,6 +10,7 @@ import {
   contarLecturasSesion,
   contarErrores,
   existeTicketPendiente,
+  guardarAsignacionOffline,
   guardarCache,
   guardarLecturaLocal,
   guardarSesionLocal,
@@ -22,8 +23,29 @@ import {
   obtenerColaCompleta,
   obtenerSesionLocal,
   obtenerTicket,
+  obtenerTickets,
   obtenerTrabajador
 } from '../src/offline/db.js'
+import { filtrarAsignacionesHoy } from '../src/modules/asignadosHoy.js'
+
+test('una asignación offline nueva queda disponible para Asignados hoy', async () => {
+  const ahora = new Date(2026, 8, 30, 12, 0, 0)
+  const fechaAsignacion = new Date(2026, 8, 30, 10, 5, 0).toISOString()
+
+  await guardarAsignacionOffline({
+    codigoTicket: 'OFFLINE-HOY-001',
+    cosechadorDni: '70001122',
+    cosechador: 'Rosa Torres',
+    dniOperador: '70000000',
+    fechaAsignacion
+  })
+
+  const asignaciones = filtrarAsignacionesHoy(await obtenerTickets(), { ahora })
+  const guardada = asignaciones.find((item) => item.codigo_ticket === 'OFFLINE-HOY-001')
+
+  assert.equal(guardada?.estado_sync, 'PENDIENTE')
+  assert.equal(guardada?.fecha_asignacion, fechaAsignacion)
+})
 
 test('un ticket guardado no se acepta por segunda vez', async () => {
   const codigoTicket = 'ABC123'
@@ -67,16 +89,19 @@ test('los tickets del caché se pueden consultar por código', async () => {
 
   assert.deepEqual(await obtenerTicket('CACHE123'), {
     codigo_ticket: 'CACHE123',
+    fecha_asignacion: null,
     estado_sync: 'SINCRONIZADO'
   })
 })
 
 test('el caché conserva una asignación local pendiente', async () => {
+  const fechaAsignacion = '2026-09-30T13:42:00.000Z'
   await guardarTicketLocal({
     codigoTicket: 'LOCAL123',
     cosechadorDni: '87654321',
     cosechador: 'Juan Pérez',
-    operacionId: 'operacion-local'
+    operacionId: 'operacion-local',
+    fechaAsignacion
   })
 
   await guardarCache({
@@ -90,9 +115,48 @@ test('el caché conserva una asignación local pendiente', async () => {
   const ticketPendiente = await obtenerTicket('LOCAL123')
   assert.equal(ticketPendiente.cosechador, 'Juan Pérez')
   assert.equal(ticketPendiente.estado_sync, 'PENDIENTE')
+  assert.equal(ticketPendiente.fecha_asignacion, fechaAsignacion)
 
   await marcarTicketSincronizado('LOCAL123')
-  assert.equal((await obtenerTicket('LOCAL123')).estado_sync, 'SINCRONIZADO')
+  const ticketSincronizado = await obtenerTicket('LOCAL123')
+  assert.equal(ticketSincronizado.estado_sync, 'SINCRONIZADO')
+  assert.equal(ticketSincronizado.fecha_asignacion, fechaAsignacion)
+})
+
+test('sincronizar y recargar caché conserva fecha de asignación sin duplicar el ticket', async () => {
+  const codigoTicket = 'SYNC-FECHA-001'
+  const fechaAsignacion = '2026-09-30T14:10:00.000Z'
+
+  await guardarTicketLocal({
+    codigoTicket,
+    cosechadorDni: '70112233',
+    cosechador: 'Ana López',
+    operacionId: 'operacion-sync-fecha',
+    fechaAsignacion
+  })
+  await marcarTicketSincronizado(codigoTicket)
+
+  await guardarCache({
+    campania: 'prueba',
+    sincronizado_en: new Date().toISOString(),
+    trabajadores: [],
+    lotes: [],
+    tickets: [
+      {
+        codigo_ticket: codigoTicket,
+        cosechador_dni: '70112233',
+        cosechador: 'Ana López'
+      }
+    ]
+  })
+
+  const coincidencias = (await obtenerTickets()).filter(
+    (item) => item.codigo_ticket === codigoTicket
+  )
+
+  assert.equal(coincidencias.length, 1)
+  assert.equal(coincidencias[0].estado_sync, 'SINCRONIZADO')
+  assert.equal(coincidencias[0].fecha_asignacion, fechaAsignacion)
 })
 
 test('una sincronización rechazada queda visible como error', async () => {

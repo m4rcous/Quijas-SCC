@@ -15,6 +15,7 @@ import {
   finalizarSesionOffline,
   obtenerLotes,
   obtenerTicket,
+  obtenerTickets,
   obtenerTrabajador,
   obtenerSesionesActivas,
   obtenerSesionActivaJabero,
@@ -30,6 +31,12 @@ import {
   mostrarContadorCosechador,
   mostrarSesionLecturaEnVista
 } from './modules/vistaSesionLectura'
+import {
+  FILTROS_ASIGNADOS_HOY,
+  filtrarAsignacionesHoy,
+  formatearHoraAsignacion,
+  obtenerBadgeEstadoAsignacion
+} from './modules/asignadosHoy'
 
 // VISTAS
 
@@ -117,6 +124,7 @@ const consultaChips = document.querySelector('#consulta-chips')
 const consultaTablaHead = document.querySelector('#consulta-tabla-head')
 const consultaTablaBody = document.querySelector('#consulta-tabla-body')
 const consultaEmpty = document.querySelector('#consulta-empty')
+const consultaContador = document.querySelector('#consulta-contador')
 
 const consultasContextuales = {
   asignacion: {
@@ -125,11 +133,12 @@ const consultasContextuales = {
     opciones: [
       { etiqueta: 'Operar', operativa: true },
       {
+        id: 'asignados-hoy',
         etiqueta: 'Asignados hoy',
         titulo: 'Asignados hoy',
         descripcion: 'Tickets asignados durante la jornada.',
         columnas: ['Cosechador', 'Ticket', 'Hora'],
-        chips: ['Todos', 'Recientes'],
+        chips: ['Todos', 'Sincronizados', 'Pendientes', 'Con error'],
         vacio: 'No hay tickets asignados hoy.'
       },
       {
@@ -192,6 +201,9 @@ const consultasContextuales = {
 }
 
 let vistaOperativaConsulta = vistaMenu
+let consultaActual = null
+let ticketsConsultaActual = []
+let filtroAsignadosHoy = FILTROS_ASIGNADOS_HOY.TODOS
 
 const tecladosManuales = new Map(
   [
@@ -255,13 +267,13 @@ function abrirMenuContextual(contexto) {
       ? 'bottom-sheet__option bottom-sheet__option--active'
       : 'bottom-sheet__option'
     boton.textContent = opcion.etiqueta
-    boton.addEventListener('click', () => {
+    boton.addEventListener('click', async () => {
       cerrarMenuContextual()
       if (opcion.operativa) {
         mostrarVista(configuracion.vistaOperativa)
         return
       }
-      mostrarConsulta(opcion)
+      await mostrarConsulta(opcion)
     })
     contextOptions.append(boton)
   }
@@ -276,11 +288,21 @@ function cerrarMenuContextual() {
   contextOverlay.setAttribute('aria-hidden', 'true')
 }
 
-function mostrarConsulta(configuracion) {
+async function mostrarConsulta(configuracion) {
+  consultaActual = configuracion
   tituloConsultaHeader.textContent = configuracion.titulo
   tituloConsulta.textContent = configuracion.titulo
   descripcionConsulta.textContent = configuracion.descripcion
   consultaBusqueda.value = ''
+  consultaContador.classList.add('oculto')
+
+  if (configuracion.id === 'asignados-hoy') {
+    await prepararConsultaAsignadosHoy()
+    mostrarVista(vistaConsulta)
+    consultaBusqueda.focus()
+    return
+  }
+
   consultaBusqueda.placeholder = `Buscar en ${configuracion.titulo.toLowerCase()}...`
 
   consultaChips.replaceChildren()
@@ -320,6 +342,115 @@ function mostrarConsulta(configuracion) {
   mostrarVista(vistaConsulta)
   consultaBusqueda.focus()
 }
+
+async function prepararConsultaAsignadosHoy() {
+  consultaBusqueda.placeholder = 'Buscar DNI, nombre o ticket...'
+  filtroAsignadosHoy = FILTROS_ASIGNADOS_HOY.TODOS
+  ticketsConsultaActual = await obtenerTickets()
+
+  const filtros = [
+    ['Todos', FILTROS_ASIGNADOS_HOY.TODOS],
+    ['Sincronizados', FILTROS_ASIGNADOS_HOY.SINCRONIZADO],
+    ['Pendientes', FILTROS_ASIGNADOS_HOY.PENDIENTE],
+    ['Con error', FILTROS_ASIGNADOS_HOY.ERROR]
+  ]
+
+  consultaChips.replaceChildren()
+  filtros.forEach(([etiqueta, valor], indice) => {
+    const boton = document.createElement('button')
+    boton.type = 'button'
+    boton.className = `filter-chip${indice === 0 ? ' selected' : ''}`
+    boton.textContent = etiqueta
+    boton.dataset.filtro = valor
+    boton.setAttribute('aria-pressed', String(indice === 0))
+    boton.addEventListener('click', () => {
+      filtroAsignadosHoy = valor
+      consultaChips.querySelectorAll('.filter-chip').forEach((item) => {
+        const seleccionado = item === boton
+        item.classList.toggle('selected', seleccionado)
+        item.setAttribute('aria-pressed', String(seleccionado))
+      })
+      renderAsignadosHoy()
+    })
+    consultaChips.append(boton)
+  })
+
+  consultaTablaHead.replaceChildren()
+  for (const columna of ['Cosechador', 'Ticket', 'Hora']) {
+    const th = document.createElement('th')
+    th.scope = 'col'
+    th.textContent = columna
+    if (columna === 'Hora') th.classList.add('industrial-table__numeric')
+    consultaTablaHead.append(th)
+  }
+
+  renderAsignadosHoy()
+}
+
+function renderAsignadosHoy() {
+  const asignacionesDelDia = filtrarAsignacionesHoy(ticketsConsultaActual)
+  const asignaciones = filtrarAsignacionesHoy(ticketsConsultaActual, {
+    busqueda: consultaBusqueda.value,
+    filtro: filtroAsignadosHoy
+  })
+
+  consultaTablaBody.replaceChildren()
+
+  for (const ticket of asignaciones) {
+    const fila = document.createElement('tr')
+
+    const cosechadorCell = document.createElement('td')
+    cosechadorCell.className = 'industrial-table__person'
+    const nombre = document.createElement('strong')
+    nombre.textContent = ticket.cosechador || 'Sin nombre'
+    const dni = document.createElement('span')
+    dni.textContent = ticket.cosechador_dni || 'DNI no disponible'
+    cosechadorCell.append(nombre, dni)
+
+    const ticketCell = document.createElement('td')
+    ticketCell.className = 'industrial-table__ticket'
+    const codigo = document.createElement('strong')
+    codigo.textContent = ticket.codigo_ticket
+    ticketCell.append(codigo)
+
+    const badge = obtenerBadgeEstadoAsignacion(ticket.estado_sync)
+    if (badge) {
+      const estado = document.createElement('span')
+      estado.className = `sync-badge ${badge.clase}`
+      estado.textContent = badge.etiqueta
+      ticketCell.append(estado)
+    }
+
+    const horaCell = document.createElement('td')
+    horaCell.className = 'industrial-table__numeric industrial-table__time'
+    horaCell.textContent = formatearHoraAsignacion(ticket.fecha_asignacion)
+
+    fila.append(cosechadorCell, ticketCell, horaCell)
+    consultaTablaBody.append(fila)
+  }
+
+  const total = asignaciones.length
+  consultaContador.textContent = `${total} ${total === 1 ? 'asignación' : 'asignaciones'}`
+  consultaContador.classList.remove('oculto')
+
+  if (total > 0) {
+    consultaEmpty.classList.add('oculto')
+    return
+  }
+
+  const sinResultados = asignacionesDelDia.length > 0
+  consultaEmpty.querySelector('strong').textContent = sinResultados
+    ? 'No se encontraron asignaciones.'
+    : 'No hay tickets asignados hoy.'
+  consultaEmpty.querySelector('p').textContent = sinResultados
+    ? 'Pruebe otra búsqueda o cambie el filtro.'
+    : 'Las nuevas asignaciones aparecerán aquí, incluso si se crean sin conexión.'
+  consultaEmpty.classList.remove('oculto')
+}
+
+consultaBusqueda.addEventListener('input', () => {
+  if (consultaActual?.id === 'asignados-hoy') renderAsignadosHoy()
+})
 
 window.addEventListener('online', async () => {
   console.log('Conexión recuperada')

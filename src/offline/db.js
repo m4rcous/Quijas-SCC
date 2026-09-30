@@ -86,6 +86,9 @@ export async function guardarCache(cache) {
 
   const ticketsStore = tx.objectStore('tickets')
   const ticketsLocales = await ticketsStore.getAll()
+  const ticketsLocalesPorCodigo = new Map(
+    ticketsLocales.map((ticket) => [ticket.codigo_ticket, ticket])
+  )
   const ticketsPendientes = ticketsLocales.filter(
     (ticket) => ticket.estado_sync !== 'SINCRONIZADO'
   )
@@ -125,8 +128,11 @@ export async function guardarCache(cache) {
   }
 
   for (const ticket of cache.tickets) {
+    const ticketLocal = ticketsLocalesPorCodigo.get(ticket.codigo_ticket)
     await ticketsStore.put({
       ...ticket,
+      fecha_asignacion:
+        ticket.fecha_asignacion ?? ticketLocal?.fecha_asignacion ?? null,
       estado_sync: 'SINCRONIZADO'
     })
   }
@@ -190,11 +196,18 @@ export async function obtenerTicket(codigo) {
   return db.get('tickets', codigo)
 }
 
+export async function obtenerTickets() {
+  const db = await dbPromise
+
+  return db.getAll('tickets')
+}
+
 export async function guardarTicketLocal({
   codigoTicket,
   cosechadorDni,
   cosechador,
-  operacionId
+  operacionId,
+  fechaAsignacion = new Date().toISOString()
 }) {
   const db = await dbPromise
 
@@ -204,6 +217,7 @@ export async function guardarTicketLocal({
     cosechador,
     operacion_id: operacionId,
     estado_sync: 'PENDIENTE',
+    fecha_asignacion: fechaAsignacion,
     actualizado_en: new Date().toISOString()
   })
 }
@@ -395,7 +409,8 @@ export async function guardarAsignacionOffline({
   codigoTicket,
   cosechadorDni,
   cosechador,
-  dniOperador
+  dniOperador,
+  fechaAsignacion = new Date().toISOString()
 }) {
   const db = await dbPromise
   const tx = db.transaction(['meta', 'cola', 'tickets'], 'readwrite')
@@ -413,6 +428,7 @@ export async function guardarAsignacionOffline({
     cosechador,
     operacion_id: operacion.id,
     estado_sync: 'PENDIENTE',
+    fecha_asignacion: fechaAsignacion,
     actualizado_en: new Date().toISOString()
   })
   await tx.done
