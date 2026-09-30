@@ -292,25 +292,43 @@ export async function obtenerSesionLocal(id) {
   return db.get('sesiones', id)
 }
 
+async function recuperarDniOperadorSesiones(db, sesiones) {
+  const sesionesSinOperador = sesiones.filter((sesion) => !sesion.dni_operador)
+  if (!sesionesSinOperador.length) return sesiones
+
+  const operaciones = await db.getAll('cola')
+  const operadorPorSesion = new Map(
+    operaciones
+      .filter(
+        (operacion) =>
+          operacion.tipo === 'INICIAR_SESION' &&
+          operacion.payload?.sesionId &&
+          operacion.payload?.dniOperador
+      )
+      .map((operacion) => [operacion.payload.sesionId, operacion.payload.dniOperador])
+  )
+
+  for (const sesion of sesionesSinOperador) {
+    const dniOperador = operadorPorSesion.get(sesion.id ?? sesion.sesion_id)
+    if (!dniOperador) continue
+    sesion.dni_operador = dniOperador
+    await db.put('sesiones', sesion)
+  }
+
+  return sesiones
+}
+
 export async function obtenerSesionesActivas(dniOperador) {
   const db = await dbPromise
   const sesiones = await db.getAllFromIndex('sesiones', 'estado', 'ACTIVA')
-  const operaciones = sesiones.some((sesion) => !sesion.dni_operador)
-    ? await db.getAll('cola')
-    : []
-  for (const sesion of sesiones) {
-    if (!sesion.dni_operador) {
-      const inicio = operaciones.find(
-        (operacion) =>
-          operacion.tipo === 'INICIAR_SESION' &&
-          operacion.payload.sesionId === sesion.id
-      )
-      if (inicio) {
-        sesion.dni_operador = inicio.payload.dniOperador
-        await db.put('sesiones', sesion)
-      }
-    }
-  }
+  await recuperarDniOperadorSesiones(db, sesiones)
+  return sesiones.filter((sesion) => sesion.dni_operador === dniOperador)
+}
+
+export async function obtenerSesionesOperador(dniOperador) {
+  const db = await dbPromise
+  const sesiones = await db.getAll('sesiones')
+  await recuperarDniOperadorSesiones(db, sesiones)
   return sesiones.filter((sesion) => sesion.dni_operador === dniOperador)
 }
 

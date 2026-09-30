@@ -1,4 +1,5 @@
 import './style.css'
+import { supabase } from './supabase'
 import { validarOperador } from './modules/auth'
 import { buscarCosechador } from './modules/asignacionTickets'
 import { actualizarCacheOperativa } from './modules/cacheOperativa'
@@ -20,6 +21,7 @@ import {
   obtenerTrabajadores,
   obtenerLecturasSesion,
   obtenerSesionesActivas,
+  obtenerSesionesOperador,
   obtenerSesionActivaJabero,
   obtenerUltimaLecturaSesion,
   obtenerColaCompleta,
@@ -52,6 +54,22 @@ import {
   ordenarCosechadoresJabas,
   resumirCosechadoresJabas
 } from './modules/cosechadoresJabas'
+import {
+  FILTROS_SESIONES_LECTURA,
+  enriquecerSesionLectura,
+  filtrarSesionesLectura,
+  formatearFechaSesion,
+  formatearPeriodoSesion,
+  obtenerBadgeEstadoSesion
+} from './modules/sesionesLectura'
+import {
+  buscarRankingCosechadores,
+  esErrorConexionRanking,
+  formatearUltimaLectura,
+  obtenerRankingCosechadores,
+  reemplazarRankingCosechadores,
+  resumirRankingCosechadores
+} from './modules/rankingCosechadores'
 
 // VISTAS
 
@@ -62,6 +80,8 @@ const vistaJaberos = document.querySelector('#vista-jaberos')
 const vistaLectura = document.querySelector('#vista-lectura')
 const vistaSync = document.querySelector('#vista-sync')
 const vistaConsulta = document.querySelector('#vista-consulta')
+const vistaReportes = document.querySelector('#vista-reportes')
+const vistaRankingCosechadores = document.querySelector('#vista-ranking-cosechadores')
 const sesionesRestaurables = document.querySelector('#sesiones-restaurables')
 const resumenSync = document.querySelector('#resumen-sync')
 const operacionesError = document.querySelector('#operaciones-error')
@@ -79,7 +99,21 @@ const btnSalirMenu = document.querySelector('#btn-salir-menu')
 const btnMenuAsignacion = document.querySelector('#btn-menu-asignacion')
 const btnMenuJaberos = document.querySelector('#btn-menu-jaberos')
 const btnMenuLectura = document.querySelector('#btn-menu-lectura')
+const btnMenuReportes = document.querySelector('#btn-menu-reportes')
 const estadoConexion = document.querySelector('#estado-conexion')
+
+// REPORTES
+
+const btnVolverReportes = document.querySelector('#btn-volver-reportes')
+const btnReporteRanking = document.querySelector('#btn-reporte-ranking')
+const btnVolverRanking = document.querySelector('#btn-volver-ranking')
+const btnActualizarRanking = document.querySelector('#btn-actualizar-ranking')
+const rankingCampania = document.querySelector('#ranking-campania')
+const rankingBusqueda = document.querySelector('#ranking-busqueda')
+const rankingResumen = document.querySelector('#ranking-resumen')
+const rankingFeedback = document.querySelector('#ranking-feedback')
+const rankingTablaBody = document.querySelector('#ranking-tabla-body')
+const rankingEmpty = document.querySelector('#ranking-empty')
 
 // ASIGNACIÓN
 
@@ -207,12 +241,14 @@ const consultasContextuales = {
         vacio: 'Aún no se han registrado jabas en esta sesión.'
       },
       {
+        id: 'sesiones-lectura',
         etiqueta: 'Sesiones',
         titulo: 'Sesiones',
-        descripcion: 'Sesiones de lectura disponibles para consulta.',
-        columnas: ['Jabero', 'Lote', 'Estado'],
-        chips: ['Todas', 'Activas'],
-        vacio: 'No hay sesiones para mostrar.'
+        descripcion: 'Sesiones registradas localmente en este dispositivo.',
+        columnas: ['Jabero / lote', 'Jabas', 'Estado'],
+        columnasNumericas: ['Jabas'],
+        chips: ['Todas', 'Activas', 'Cerradas'],
+        vacio: 'No hay sesiones registradas en este dispositivo.'
       }
     ]
   }
@@ -226,6 +262,9 @@ let trabajadoresConsultaActual = []
 let filtroJaberosCampania = FILTROS_JABEROS_CAMPANIA.TODOS
 let cosechadoresJabasActual = []
 let ordenCosechadoresJabas = ORDEN_COSECHADORES_JABAS.MAS_JABAS
+let sesionesConsultaActual = []
+let filtroSesionesLectura = FILTROS_SESIONES_LECTURA.TODAS
+let rankingCosechadoresActual = []
 
 const tecladosManuales = new Map(
   [
@@ -353,6 +392,13 @@ async function mostrarConsulta(configuracion) {
     await prepararConsultaCosechadoresJabas()
     mostrarVista(vistaConsulta)
     if (!consultaBusqueda.disabled) consultaBusqueda.focus()
+    return
+  }
+
+  if (configuracion.id === 'sesiones-lectura') {
+    await prepararConsultaSesionesLectura()
+    mostrarVista(vistaConsulta)
+    consultaBusqueda.focus()
     return
   }
 
@@ -733,11 +779,342 @@ function renderCosechadoresJabas() {
   consultaEmpty.classList.remove('oculto')
 }
 
+async function prepararConsultaSesionesLectura() {
+  consultaBusqueda.placeholder = 'Buscar jabero, DNI, lote o variedad...'
+  consultaBusqueda.disabled = false
+  consultaChips.classList.remove('oculto', 'filter-chips--wrap')
+  consultaEmptyAccion.classList.add('oculto')
+  filtroSesionesLectura = FILTROS_SESIONES_LECTURA.TODAS
+
+  const sesiones = await obtenerSesionesOperador(operador.dni)
+  sesionesConsultaActual = await Promise.all(
+    sesiones.map(async (sesion) => {
+      const sesionId = sesion.id ?? sesion.sesion_id
+      const lecturas = sesionId ? await obtenerLecturasSesion(sesionId) : []
+      return enriquecerSesionLectura(sesion, lecturas)
+    })
+  )
+
+  const filtros = [
+    ['Todas', FILTROS_SESIONES_LECTURA.TODAS],
+    ['Activas', FILTROS_SESIONES_LECTURA.ACTIVAS],
+    ['Cerradas', FILTROS_SESIONES_LECTURA.CERRADAS]
+  ]
+
+  consultaChips.replaceChildren()
+  filtros.forEach(([etiqueta, valor], indice) => {
+    const boton = document.createElement('button')
+    boton.type = 'button'
+    boton.className = `filter-chip${indice === 0 ? ' selected' : ''}`
+    boton.textContent = etiqueta
+    boton.dataset.filtro = valor
+    boton.setAttribute('aria-pressed', String(indice === 0))
+    boton.addEventListener('click', () => {
+      filtroSesionesLectura = valor
+      consultaChips.querySelectorAll('.filter-chip').forEach((item) => {
+        const seleccionado = item === boton
+        item.classList.toggle('selected', seleccionado)
+        item.setAttribute('aria-pressed', String(seleccionado))
+      })
+      renderSesionesLectura()
+    })
+    consultaChips.append(boton)
+  })
+
+  consultaTablaHead.replaceChildren()
+  for (const columna of ['Jabero / lote', 'Jabas', 'Estado']) {
+    const th = document.createElement('th')
+    th.scope = 'col'
+    th.textContent = columna
+    if (columna === 'Jabas') th.classList.add('industrial-table__numeric')
+    consultaTablaHead.append(th)
+  }
+
+  renderSesionesLectura()
+}
+
+function renderSesionesLectura() {
+  const sesiones = filtrarSesionesLectura(sesionesConsultaActual, {
+    busqueda: consultaBusqueda.value,
+    filtro: filtroSesionesLectura
+  })
+
+  consultaTablaBody.replaceChildren()
+
+  for (const sesion of sesiones) {
+    const fila = document.createElement('tr')
+    fila.className = 'industrial-table__row--interactive'
+    fila.tabIndex = 0
+    fila.setAttribute('role', 'button')
+    fila.setAttribute(
+      'aria-label',
+      `Ver sesión de ${sesion.jabero || sesion.dni_jabero || 'jabero sin identificar'}`
+    )
+
+    const resumenCell = document.createElement('td')
+    resumenCell.className = 'industrial-table__person session-row__summary'
+    const jabero = document.createElement('strong')
+    jabero.textContent = sesion.jabero || sesion.dni_jabero || 'Jabero sin identificar'
+    const lote = document.createElement('span')
+    lote.textContent =
+      [sesion.lote_codigo || sesion.lote_id, sesion.variedad]
+        .filter(Boolean)
+        .join(' · ') || 'Lote no disponible'
+    const periodo = document.createElement('span')
+    periodo.className = 'session-row__time'
+    periodo.textContent = formatearPeriodoSesion(sesion)
+    resumenCell.append(jabero, lote, periodo)
+
+    const jabasCell = document.createElement('td')
+    jabasCell.className = 'industrial-table__numeric industrial-table__count'
+    jabasCell.textContent = sesion.total_jabas
+
+    const estadoCell = document.createElement('td')
+    const badge = obtenerBadgeEstadoSesion(sesion.estado)
+    if (badge) {
+      const estado = document.createElement('span')
+      estado.className = `sync-badge ${badge.clase}`
+      estado.textContent = badge.etiqueta
+      estadoCell.append(estado)
+    } else {
+      estadoCell.textContent = sesion.estado || '—'
+    }
+
+    const abrirDetalle = () => abrirDetalleSesionLectura(sesion)
+    fila.addEventListener('click', abrirDetalle)
+    fila.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return
+      event.preventDefault()
+      abrirDetalle()
+    })
+
+    fila.append(resumenCell, jabasCell, estadoCell)
+    consultaTablaBody.append(fila)
+  }
+
+  const total = sesiones.length
+  if (filtroSesionesLectura === FILTROS_SESIONES_LECTURA.ACTIVAS) {
+    consultaContador.textContent = `${total} ${total === 1 ? 'sesión activa' : 'sesiones activas'}`
+  } else if (filtroSesionesLectura === FILTROS_SESIONES_LECTURA.CERRADAS) {
+    consultaContador.textContent = `${total} ${total === 1 ? 'sesión cerrada' : 'sesiones cerradas'}`
+  } else {
+    consultaContador.textContent = `${total} ${total === 1 ? 'sesión' : 'sesiones'}`
+  }
+  consultaContador.classList.remove('oculto')
+
+  if (total > 0) {
+    consultaEmpty.classList.add('oculto')
+    return
+  }
+
+  const hayBusqueda = consultaBusqueda.value.trim().length > 0
+  let titulo = 'No hay sesiones registradas en este dispositivo.'
+  let detalle = 'Las sesiones creadas en este PDA aparecerán aquí.'
+
+  if (hayBusqueda) {
+    titulo = 'No se encontraron sesiones.'
+    detalle = 'Pruebe con otro jabero, DNI, lote o variedad.'
+  } else if (
+    sesionesConsultaActual.length > 0 &&
+    filtroSesionesLectura === FILTROS_SESIONES_LECTURA.ACTIVAS
+  ) {
+    titulo = 'No hay sesiones activas.'
+    detalle = 'Las sesiones activas aparecerán aquí mientras estén abiertas.'
+  } else if (
+    sesionesConsultaActual.length > 0 &&
+    filtroSesionesLectura === FILTROS_SESIONES_LECTURA.CERRADAS
+  ) {
+    titulo = 'No hay sesiones cerradas.'
+    detalle = 'Las sesiones finalizadas aparecerán aquí.'
+  }
+
+  consultaEmpty.querySelector('strong').textContent = titulo
+  consultaEmpty.querySelector('p').textContent = detalle
+  consultaEmpty.classList.remove('oculto')
+}
+
+function abrirDetalleSesionLectura(sesion) {
+  contextTitle.textContent = 'Detalle de sesión'
+  contextOptions.replaceChildren()
+
+  const detalle = document.createElement('dl')
+  detalle.className = 'session-detail'
+  const campos = [
+    ['Jabero', sesion.jabero],
+    ['DNI', sesion.dni_jabero],
+    ['Lote', sesion.lote_codigo || sesion.lote_id],
+    ['Variedad', sesion.variedad],
+    ['Inicio', formatearFechaSesion(sesion.fecha_inicio)],
+    ['Fin', sesion.fecha_fin ? formatearFechaSesion(sesion.fecha_fin) : ''],
+    ['Estado', obtenerBadgeEstadoSesion(sesion.estado)?.etiqueta || sesion.estado],
+    ['Total de jabas', String(sesion.total_jabas)],
+    ['Cosechadores distintos', String(sesion.cosechadores_distintos)]
+  ]
+
+  for (const [etiqueta, valor] of campos) {
+    if (!valor) continue
+    const grupo = document.createElement('div')
+    grupo.className = 'session-detail__row'
+    const termino = document.createElement('dt')
+    termino.textContent = etiqueta
+    const dato = document.createElement('dd')
+    dato.textContent = valor
+    grupo.append(termino, dato)
+    detalle.append(grupo)
+  }
+
+  contextOptions.append(detalle)
+
+  if (sesion.estado === 'ACTIVA') {
+    const continuar = document.createElement('button')
+    continuar.type = 'button'
+    continuar.className = 'bottom-sheet__option bottom-sheet__option--active'
+    continuar.textContent = 'Continuar lectura'
+    continuar.addEventListener('click', async () => {
+      sesionLectura = {
+        ...sesion,
+        sesion_id: sesion.sesion_id ?? sesion.id
+      }
+      mostrarVista(vistaLectura)
+      await mostrarSesionLectura()
+    })
+    contextOptions.append(continuar)
+  }
+
+  contextOverlay.classList.remove('oculto')
+  contextOverlay.setAttribute('aria-hidden', 'false')
+  btnCerrarContexto.focus()
+}
+
+async function abrirRankingCosechadores() {
+  rankingBusqueda.value = ''
+  rankingCosechadoresActual = []
+  rankingCampania.textContent = 'Campaña activa'
+  rankingResumen.classList.add('oculto')
+  rankingTablaBody.replaceChildren()
+  rankingEmpty.classList.add('oculto')
+  mostrarVista(vistaRankingCosechadores)
+  await cargarRankingCosechadores()
+  rankingBusqueda.focus()
+}
+
+async function cargarRankingCosechadores() {
+  btnActualizarRanking.disabled = true
+  mostrarFeedbackRanking('Cargando ranking…')
+
+  if (!navigator.onLine) {
+    mostrarFeedbackRanking('No se puede actualizar el ranking sin conexión.', 'error')
+    btnActualizarRanking.disabled = false
+    return
+  }
+
+  try {
+    const respuesta = await obtenerRankingCosechadores(
+      operador.dni,
+      (nombre, parametros) => supabase.rpc(nombre, parametros)
+    )
+    rankingCosechadoresActual = reemplazarRankingCosechadores(
+      rankingCosechadoresActual,
+      respuesta.ranking
+    )
+    rankingCampania.textContent = respuesta.campania || 'Campaña activa'
+    ocultarFeedbackRanking()
+    renderRankingCosechadores()
+  } catch (error) {
+    const mensaje = esErrorConexionRanking(error)
+      ? 'No se puede actualizar el ranking sin conexión.'
+      : `No se pudo cargar el ranking: ${error.message}`
+    mostrarFeedbackRanking(mensaje, 'error')
+
+    if (rankingCosechadoresActual.length === 0) {
+      rankingResumen.classList.add('oculto')
+      rankingTablaBody.replaceChildren()
+      rankingEmpty.classList.add('oculto')
+    }
+  } finally {
+    btnActualizarRanking.disabled = false
+  }
+}
+
+function renderRankingCosechadores() {
+  const resumen = resumirRankingCosechadores(rankingCosechadoresActual)
+  rankingResumen.textContent = `${formatearNumero(resumen.cosechadores)} ${
+    resumen.cosechadores === 1 ? 'cosechador' : 'cosechadores'
+  } · ${formatearNumero(resumen.jabas)} ${resumen.jabas === 1 ? 'jaba' : 'jabas'}`
+  rankingResumen.classList.remove('oculto')
+
+  const filas = buscarRankingCosechadores(
+    rankingCosechadoresActual,
+    rankingBusqueda.value
+  )
+  rankingTablaBody.replaceChildren()
+
+  for (const fila of filas) {
+    const tr = document.createElement('tr')
+
+    const posicion = document.createElement('td')
+    posicion.className = 'ranking-table__position'
+    posicion.textContent = fila.posicion
+
+    const persona = document.createElement('td')
+    persona.className = 'industrial-table__person'
+    const nombre = document.createElement('strong')
+    nombre.textContent = fila.cosechador || fila.cosechador_dni || 'Sin identificar'
+    const dni = document.createElement('span')
+    dni.textContent = fila.cosechador_dni || 'DNI no disponible'
+    persona.append(nombre, dni)
+
+    const produccion = document.createElement('td')
+    produccion.className =
+      'industrial-table__numeric industrial-table__count ranking-table__metric'
+    const total = document.createElement('strong')
+    total.textContent = formatearNumero(fila.total_jabas)
+    const ultima = document.createElement('span')
+    ultima.textContent = formatearUltimaLectura(fila.ultima_lectura)
+    produccion.append(total, ultima)
+
+    tr.append(posicion, persona, produccion)
+    rankingTablaBody.append(tr)
+  }
+
+  if (filas.length > 0) {
+    rankingEmpty.classList.add('oculto')
+    return
+  }
+
+  const hayBusqueda = rankingBusqueda.value.trim().length > 0
+  rankingEmpty.querySelector('strong').textContent = hayBusqueda
+    ? 'No se encontraron cosechadores.'
+    : 'Aún no hay jabas registradas en esta campaña.'
+  rankingEmpty.querySelector('p').textContent = hayBusqueda
+    ? 'Pruebe con otro nombre o DNI.'
+    : 'Las lecturas sincronizadas aparecerán aquí.'
+  rankingEmpty.classList.remove('oculto')
+}
+
+function mostrarFeedbackRanking(mensaje, tipo = '') {
+  rankingFeedback.textContent = mensaje
+  rankingFeedback.className = `resultado ranking-feedback${tipo ? ` ${tipo}` : ''}`
+}
+
+function ocultarFeedbackRanking() {
+  rankingFeedback.textContent = ''
+  rankingFeedback.className = 'resultado ranking-feedback oculto'
+}
+
+function formatearNumero(valor) {
+  return Number(valor || 0).toLocaleString('es-PE')
+}
+
 consultaBusqueda.addEventListener('input', () => {
   if (consultaActual?.id === 'asignados-hoy') renderAsignadosHoy()
   if (consultaActual?.id === 'jaberos-campania') renderJaberosCampania()
   if (consultaActual?.id === 'cosechadores-jabas') renderCosechadoresJabas()
+  if (consultaActual?.id === 'sesiones-lectura') renderSesionesLectura()
 })
+
+rankingBusqueda.addEventListener('input', renderRankingCosechadores)
+btnActualizarRanking.addEventListener('click', cargarRankingCosechadores)
 
 window.addEventListener('online', async () => {
   console.log('Conexión recuperada')
@@ -816,6 +1193,14 @@ btnMenuLectura.addEventListener('click', async () => {
   await mostrarSesionesActivas()
   if (!sesionLectura) loteLectura.focus()
 })
+
+btnMenuReportes.addEventListener('click', () => {
+  mostrarVista(vistaReportes)
+})
+
+btnVolverReportes.addEventListener('click', mostrarMenu)
+btnReporteRanking.addEventListener('click', abrirRankingCosechadores)
+btnVolverRanking.addEventListener('click', () => mostrarVista(vistaReportes))
 
 estadoConexion.addEventListener('click', mostrarEstadoSync)
 document.querySelector('#btn-volver-sync').addEventListener('click', mostrarMenu)
@@ -1097,6 +1482,8 @@ function mostrarVista(vista) {
   vistaLectura.classList.add('oculto')
   vistaSync.classList.add('oculto')
   vistaConsulta.classList.add('oculto')
+  vistaReportes.classList.add('oculto')
+  vistaRankingCosechadores.classList.add('oculto')
   vista.classList.remove('oculto')
 }
 

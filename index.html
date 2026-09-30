@@ -41,6 +41,12 @@
         <circle cx="11" cy="11" r="6" />
         <path d="M16 16l4 4" />
       </symbol>
+      <symbol id="icon-refresh" viewBox="0 0 24 24">
+        <path d="M20 6v5h-5" />
+        <path d="M4 18v-5h5" />
+        <path d="M6.1 9a7 7 0 0111.4-2.6L20 11" />
+        <path d="M17.9 15a7 7 0 01-11.4 2.6L4 13" />
+      </symbol>
       <symbol id="icon-filter" viewBox="0 0 24 24">
         <path d="M4 6h16M7 12h10M10 18h4" />
       </symbol>
@@ -141,6 +147,110 @@
               ></span>
               <span class="home-action-tile__title">Lectura de jabas</span>
             </button>
+            <button id="btn-menu-reportes" class="home-action-tile">
+              <span class="home-action-tile__icon"
+                ><svg><use href="#icon-search"></use></svg
+              ></span>
+              <span class="home-action-tile__title">Reportes</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section id="vista-reportes" class="pantalla pantalla-datos oculto">
+        <header class="app-header">
+          <button
+            id="btn-volver-reportes"
+            class="icon-button btn-secondary"
+            aria-label="Volver al menú"
+          >
+            <svg aria-hidden="true"><use href="#icon-arrow-left"></use></svg>
+          </button>
+          <div class="app-header__title">Reportes</div>
+          <span class="app-header__spacer"></span>
+        </header>
+        <div class="contenido contenido-home">
+          <div class="titulo-pagina titulo-pagina--datos">
+            <p class="eyebrow">Campaña activa</p>
+            <h1>Reportes</h1>
+            <p>Consulte información consolidada de la operación.</p>
+          </div>
+          <div class="menu-grid">
+            <button id="btn-reporte-ranking" class="home-action-tile">
+              <span class="home-action-tile__icon home-action-tile__icon--harvest"
+                ><svg><use href="#icon-user"></use></svg
+              ></span>
+              <span class="home-action-tile__title">Ranking de cosechadores</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section id="vista-ranking-cosechadores" class="pantalla pantalla-datos oculto">
+        <header class="app-header">
+          <button
+            id="btn-volver-ranking"
+            class="icon-button btn-secondary"
+            aria-label="Volver a reportes"
+          >
+            <svg aria-hidden="true"><use href="#icon-arrow-left"></use></svg>
+          </button>
+          <div class="app-header__title">Ranking de cosechadores</div>
+          <span class="app-header__spacer"></span>
+        </header>
+        <div class="contenido contenido-datos">
+          <div class="titulo-pagina titulo-pagina--datos">
+            <p class="eyebrow">Reporte global</p>
+            <h1>Ranking de cosechadores</h1>
+            <p id="ranking-campania">Campaña activa</p>
+          </div>
+          <div class="filter-bar">
+            <label class="search-field" for="ranking-busqueda">
+              <svg aria-hidden="true"><use href="#icon-search"></use></svg>
+              <input
+                id="ranking-busqueda"
+                type="search"
+                placeholder="Buscar nombre o DNI..."
+              />
+            </label>
+            <button
+              id="btn-actualizar-ranking"
+              type="button"
+              class="icon-button btn-secondary"
+              aria-label="Actualizar ranking"
+              title="Actualizar"
+            >
+              <svg aria-hidden="true"><use href="#icon-refresh"></use></svg>
+            </button>
+          </div>
+          <p
+            id="ranking-resumen"
+            class="consulta-contador oculto"
+            aria-live="polite"
+          ></p>
+          <div
+            id="ranking-feedback"
+            class="resultado ranking-feedback oculto"
+            aria-live="polite"
+          ></div>
+          <div class="industrial-table-wrap ranking-table-wrap">
+            <table class="industrial-table ranking-table">
+              <thead>
+                <tr>
+                  <th scope="col">#</th>
+                  <th scope="col">Cosechador</th>
+                  <th scope="col" class="industrial-table__numeric">Jabas</th>
+                </tr>
+              </thead>
+              <tbody id="ranking-tabla-body"></tbody>
+            </table>
+            <div id="ranking-empty" class="empty-state oculto">
+              <span class="empty-state__icon"
+                ><svg aria-hidden="true"><use href="#icon-search"></use></svg
+              ></span>
+              <strong>Aún no hay jabas registradas en esta campaña.</strong>
+              <p>Las lecturas sincronizadas aparecerán aquí.</p>
+            </div>
           </div>
         </div>
       </section>
