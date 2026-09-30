@@ -18,6 +18,7 @@ import {
   obtenerTickets,
   obtenerTrabajador,
   obtenerTrabajadores,
+  obtenerLecturasSesion,
   obtenerSesionesActivas,
   obtenerSesionActivaJabero,
   obtenerUltimaLecturaSesion,
@@ -43,6 +44,14 @@ import {
   filtrarJaberosCampania,
   obtenerBadgeEstadoJabero
 } from './modules/jaberosCampania'
+import {
+  ORDEN_COSECHADORES_JABAS,
+  agruparLecturasPorCosechador,
+  buscarCosechadoresJabas,
+  formatearHoraUltimaLectura,
+  ordenarCosechadoresJabas,
+  resumirCosechadoresJabas
+} from './modules/cosechadoresJabas'
 
 // VISTAS
 
@@ -130,6 +139,7 @@ const consultaChips = document.querySelector('#consulta-chips')
 const consultaTablaHead = document.querySelector('#consulta-tabla-head')
 const consultaTablaBody = document.querySelector('#consulta-tabla-body')
 const consultaEmpty = document.querySelector('#consulta-empty')
+const consultaEmptyAccion = document.querySelector('#consulta-empty-accion')
 const consultaContador = document.querySelector('#consulta-contador')
 
 const consultasContextuales = {
@@ -187,12 +197,13 @@ const consultasContextuales = {
     opciones: [
       { etiqueta: 'Escanear', operativa: true },
       {
+        id: 'cosechadores-jabas',
         etiqueta: 'Cosechadores y jabas',
         titulo: 'Cosechadores y jabas',
         descripcion: 'Resumen de producción de la sesión.',
-        columnas: ['Cosechador', 'Jabas', 'Última lectura'],
+        columnas: ['Cosechador', 'Jabas', 'Última'],
         columnasNumericas: ['Jabas'],
-        chips: ['Todos', 'Con jabas'],
+        chips: ['Más jabas', 'Recientes', 'A–Z'],
         vacio: 'Aún no se han registrado jabas en esta sesión.'
       },
       {
@@ -213,6 +224,8 @@ let ticketsConsultaActual = []
 let filtroAsignadosHoy = FILTROS_ASIGNADOS_HOY.TODOS
 let trabajadoresConsultaActual = []
 let filtroJaberosCampania = FILTROS_JABEROS_CAMPANIA.TODOS
+let cosechadoresJabasActual = []
+let ordenCosechadoresJabas = ORDEN_COSECHADORES_JABAS.MAS_JABAS
 
 const tecladosManuales = new Map(
   [
@@ -257,8 +270,18 @@ document.addEventListener('keydown', (event) => {
   }
 })
 
-btnVolverConsulta.addEventListener('click', () => {
+btnVolverConsulta.addEventListener('click', async () => {
   mostrarVista(vistaOperativaConsulta)
+  if (vistaOperativaConsulta === vistaLectura) {
+    if (sesionLectura) await mostrarSesionLectura()
+    else loteLectura.focus()
+  }
+})
+
+consultaEmptyAccion.addEventListener('click', () => {
+  mostrarVista(vistaLectura)
+  if (sesionLectura) mostrarSesionLectura().catch(console.error)
+  else loteLectura.focus()
 })
 
 function abrirMenuContextual(contexto) {
@@ -280,6 +303,10 @@ function abrirMenuContextual(contexto) {
       cerrarMenuContextual()
       if (opcion.operativa) {
         mostrarVista(configuracion.vistaOperativa)
+        if (contexto === 'lectura') {
+          if (sesionLectura) await mostrarSesionLectura()
+          else loteLectura.focus()
+        }
         return
       }
       await mostrarConsulta(opcion)
@@ -303,7 +330,10 @@ async function mostrarConsulta(configuracion) {
   tituloConsulta.textContent = configuracion.titulo
   descripcionConsulta.textContent = configuracion.descripcion
   consultaBusqueda.value = ''
+  consultaBusqueda.disabled = false
   consultaContador.classList.add('oculto')
+  consultaChips.classList.remove('oculto', 'filter-chips--wrap')
+  consultaEmptyAccion.classList.add('oculto')
 
   if (configuracion.id === 'asignados-hoy') {
     await prepararConsultaAsignadosHoy()
@@ -316,6 +346,13 @@ async function mostrarConsulta(configuracion) {
     await prepararConsultaJaberosCampania()
     mostrarVista(vistaConsulta)
     consultaBusqueda.focus()
+    return
+  }
+
+  if (configuracion.id === 'cosechadores-jabas') {
+    await prepararConsultaCosechadoresJabas()
+    mostrarVista(vistaConsulta)
+    if (!consultaBusqueda.disabled) consultaBusqueda.focus()
     return
   }
 
@@ -573,9 +610,133 @@ function renderJaberosCampania() {
   consultaEmpty.classList.remove('oculto')
 }
 
+async function prepararConsultaCosechadoresJabas() {
+  consultaBusqueda.placeholder = 'Buscar nombre o DNI...'
+  consultaChips.classList.add('filter-chips--wrap')
+  ordenCosechadoresJabas = ORDEN_COSECHADORES_JABAS.MAS_JABAS
+
+  const filtros = [
+    ['Más jabas', ORDEN_COSECHADORES_JABAS.MAS_JABAS],
+    ['Recientes', ORDEN_COSECHADORES_JABAS.RECIENTES],
+    ['A–Z', ORDEN_COSECHADORES_JABAS.AZ]
+  ]
+
+  consultaChips.replaceChildren()
+  filtros.forEach(([etiqueta, valor], indice) => {
+    const boton = document.createElement('button')
+    boton.type = 'button'
+    boton.className = `filter-chip${indice === 0 ? ' selected' : ''}`
+    boton.textContent = etiqueta
+    boton.dataset.orden = valor
+    boton.setAttribute('aria-pressed', String(indice === 0))
+    boton.addEventListener('click', () => {
+      ordenCosechadoresJabas = valor
+      consultaChips.querySelectorAll('.filter-chip').forEach((item) => {
+        const seleccionado = item === boton
+        item.classList.toggle('selected', seleccionado)
+        item.setAttribute('aria-pressed', String(seleccionado))
+      })
+      renderCosechadoresJabas()
+    })
+    consultaChips.append(boton)
+  })
+
+  consultaTablaHead.replaceChildren()
+  for (const columna of ['Cosechador', 'Jabas', 'Última']) {
+    const th = document.createElement('th')
+    th.scope = 'col'
+    th.textContent = columna
+    if (columna !== 'Cosechador') th.classList.add('industrial-table__numeric')
+    consultaTablaHead.append(th)
+  }
+
+  if (!sesionLectura?.sesion_id) {
+    cosechadoresJabasActual = []
+    renderCosechadoresJabas()
+    return
+  }
+
+  const [lecturas, trabajadores] = await Promise.all([
+    obtenerLecturasSesion(sesionLectura.sesion_id),
+    obtenerTrabajadores()
+  ])
+  cosechadoresJabasActual = agruparLecturasPorCosechador(lecturas, trabajadores)
+  renderCosechadoresJabas()
+}
+
+function renderCosechadoresJabas() {
+  consultaTablaBody.replaceChildren()
+
+  if (!sesionLectura?.sesion_id) {
+    consultaBusqueda.disabled = true
+    consultaChips.classList.add('oculto')
+    consultaContador.classList.add('oculto')
+    consultaEmpty.querySelector('strong').textContent =
+      'No hay una sesión de lectura activa.'
+    consultaEmpty.querySelector('p').textContent =
+      'Vuelva a lectura para iniciar o restaurar una sesión.'
+    consultaEmptyAccion.classList.remove('oculto')
+    consultaEmpty.classList.remove('oculto')
+    return
+  }
+
+  consultaBusqueda.disabled = false
+  consultaChips.classList.remove('oculto')
+  consultaEmptyAccion.classList.add('oculto')
+
+  const resumen = resumirCosechadoresJabas(cosechadoresJabasActual)
+  consultaContador.textContent = `${resumen.cosechadores} ${
+    resumen.cosechadores === 1 ? 'cosechador' : 'cosechadores'
+  } · ${resumen.jabas} ${resumen.jabas === 1 ? 'jaba' : 'jabas'}`
+  consultaContador.classList.remove('oculto')
+
+  const cosechadores = ordenarCosechadoresJabas(
+    buscarCosechadoresJabas(cosechadoresJabasActual, consultaBusqueda.value),
+    ordenCosechadoresJabas
+  )
+
+  for (const cosechador of cosechadores) {
+    const fila = document.createElement('tr')
+
+    const personaCell = document.createElement('td')
+    personaCell.className = 'industrial-table__person'
+    const nombre = document.createElement('strong')
+    nombre.textContent = cosechador.nombre || cosechador.dni || 'Sin identificar'
+    const dni = document.createElement('span')
+    dni.textContent = cosechador.dni || 'DNI no disponible'
+    personaCell.append(nombre, dni)
+
+    const jabasCell = document.createElement('td')
+    jabasCell.className = 'industrial-table__numeric industrial-table__count'
+    jabasCell.textContent = cosechador.jabas
+
+    const ultimaCell = document.createElement('td')
+    ultimaCell.className = 'industrial-table__numeric industrial-table__time'
+    ultimaCell.textContent = formatearHoraUltimaLectura(cosechador.ultimaLectura)
+
+    fila.append(personaCell, jabasCell, ultimaCell)
+    consultaTablaBody.append(fila)
+  }
+
+  if (cosechadores.length > 0) {
+    consultaEmpty.classList.add('oculto')
+    return
+  }
+
+  const hayBusqueda = consultaBusqueda.value.trim().length > 0
+  consultaEmpty.querySelector('strong').textContent = hayBusqueda
+    ? 'No se encontraron cosechadores.'
+    : 'Aún no se han registrado jabas en esta sesión.'
+  consultaEmpty.querySelector('p').textContent = hayBusqueda
+    ? 'Pruebe con otro nombre o DNI.'
+    : 'Las nuevas lecturas aparecerán aquí al volver desde Escanear.'
+  consultaEmpty.classList.remove('oculto')
+}
+
 consultaBusqueda.addEventListener('input', () => {
   if (consultaActual?.id === 'asignados-hoy') renderAsignadosHoy()
   if (consultaActual?.id === 'jaberos-campania') renderJaberosCampania()
+  if (consultaActual?.id === 'cosechadores-jabas') renderCosechadoresJabas()
 })
 
 window.addEventListener('online', async () => {

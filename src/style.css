@@ -1035,6 +1035,11 @@ select:disabled {
   display: none;
 }
 
+.filter-chips--wrap {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+
 .filter-chip {
   min-height: 40px;
   padding: 0 var(--space-4);
@@ -1133,6 +1138,11 @@ select:disabled {
   white-space: nowrap;
 }
 
+.industrial-table__count {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
 .sync-badge {
   padding: 3px 7px;
   border-radius: var(--radius-round);
@@ -1185,6 +1195,10 @@ select:disabled {
   color: var(--color-ink-600);
   font-size: var(--font-size-sm);
   line-height: 1.45;
+}
+
+.empty-state__action {
+  margin-top: var(--space-4);
 }
 
 /* Sync */

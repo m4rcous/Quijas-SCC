@@ -355,6 +355,11 @@ export async function contarLecturasSesion(sesionId) {
   return db.countFromIndex('lecturas', 'sesion_id', sesionId)
 }
 
+export async function obtenerLecturasSesion(sesionId) {
+  const db = await dbPromise
+  return db.getAllFromIndex('lecturas', 'sesion_id', sesionId)
+}
+
 export async function contarLecturasCosechador(sesionId, dni) {
   const db = await dbPromise
   const lecturas = await db.getAllFromIndex('lecturas', 'sesion_id', sesionId)
