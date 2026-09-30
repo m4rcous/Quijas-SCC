@@ -2,28 +2,70 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
+    <meta name="theme-color" content="#26734a" />
     <title>SCC - Sistema de Control de Cosecha</title>
   </head>
-
   <body>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="icon-arrow-left" viewBox="0 0 24 24">
+        <path d="M15 18l-6-6 6-6M9 12h10" />
+      </symbol>
+      <symbol id="icon-more" viewBox="0 0 24 24">
+        <circle cx="5" cy="12" r="1.4" />
+        <circle cx="12" cy="12" r="1.4" />
+        <circle cx="19" cy="12" r="1.4" />
+      </symbol>
+      <symbol id="icon-keyboard" viewBox="0 0 24 24">
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <path
+          d="M7 9h.01M11 9h.01M15 9h.01M18 9h.01M7 13h.01M11 13h.01M15 13h.01M18 13h.01M8 16h8"
+        />
+      </symbol>
+      <symbol id="icon-scan" viewBox="0 0 24 24">
+        <path
+          d="M4 8V5a1 1 0 011-1h3M16 4h3a1 1 0 011 1v3M20 16v3a1 1 0 01-1 1h-3M8 20H5a1 1 0 01-1-1v-3M7 12h10"
+        />
+      </symbol>
+      <symbol id="icon-ticket" viewBox="0 0 24 24">
+        <path d="M5 5h14v4a3 3 0 000 6v4H5v-4a3 3 0 000-6V5zM12 7v10" />
+      </symbol>
+      <symbol id="icon-user" viewBox="0 0 24 24">
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4.5 20a7.5 7.5 0 0115 0" />
+      </symbol>
+      <symbol id="icon-crate" viewBox="0 0 24 24">
+        <path d="M4 8h16l-1.5 11h-13L4 8zM7 8l1-3h8l1 3M8 12h8M9 16h6" />
+      </symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="6" />
+        <path d="M16 16l4 4" />
+      </symbol>
+      <symbol id="icon-filter" viewBox="0 0 24 24">
+        <path d="M4 6h16M7 12h10M10 18h4" />
+      </symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24"><path d="M5 12l4 4L19 6" /></symbol>
+      <symbol id="icon-close" viewBox="0 0 24 24">
+        <path d="M6 6l12 12M18 6L6 18" />
+      </symbol>
+    </svg>
+
     <main class="app">
-      <!-- LOGIN -->
-
-      <section id="vista-login" class="pantalla">
-        <div class="card login-card">
-          <div class="logo">SCC</div>
-
-          <h1>Sistema de Control de Cosecha</h1>
-
-          <p class="subtitulo">Identifique al operador para continuar</p>
-
-          <form id="form-login">
+      <section id="vista-login" class="pantalla pantalla-login">
+        <div class="login-card card">
+          <div class="marca-scc">
+            <span class="marca-scc__simbolo">S</span><span>SCC</span>
+          </div>
+          <div class="login-copy">
+            <h1>Sistema de Control de Cosecha</h1>
+            <p class="subtitulo">Identifique al operador para continuar</p>
+          </div>
+          <form id="form-login" class="form-stack">
             <label for="dni-operador">DNI del operador</label>
-
-            <div class="campo-con-teclado">
+            <div class="campo-con-teclado scan-input">
+              <span class="scan-input__icon"
+                ><svg aria-hidden="true"><use href="#icon-scan"></use></svg
+              ></span>
               <input
                 id="dni-operador"
                 type="text"
@@ -35,132 +77,131 @@
               />
               <button
                 type="button"
-                class="btn-teclado"
+                class="btn-teclado icon-button"
                 aria-label="Mostrar teclado"
                 aria-pressed="false"
                 aria-controls="dni-operador"
               >
-                ⌨
+                <svg aria-hidden="true"><use href="#icon-keyboard"></use></svg>
               </button>
             </div>
-
-            <button type="submit">Ingresar</button>
+            <button type="submit" class="btn-primary">Ingresar</button>
           </form>
-
-          <div id="login-mensaje" class="mensaje"></div>
+          <div id="login-mensaje" class="mensaje" aria-live="polite"></div>
         </div>
       </section>
 
-      <!-- MENÚ PRINCIPAL -->
-
       <section id="vista-menu" class="pantalla oculto">
-        <header class="topbar">
-          <div>
-            <span class="topbar-label">Operador</span>
-
-            <strong id="menu-operador">-</strong>
+        <header class="app-header">
+          <div class="app-header__identity">
+            <span class="app-header__brand">SCC</span>
+            <div>
+              <span class="topbar-label">Operador</span
+              ><strong id="menu-operador">-</strong>
+            </div>
           </div>
-
-          <div class="menu-topbar-acciones">
+          <div class="app-header__actions">
             <button
               id="estado-conexion"
-              class="estado-conexion online"
+              class="estado-conexion oculto"
               type="button"
               aria-label="Ver estado de sincronización"
               aria-live="polite"
-            >
-              ● En línea
+            ></button>
+            <button id="btn-salir-menu" class="btn-secondary btn-compacto">
+              Salir
             </button>
-
-            <button id="btn-salir-menu" class="boton-secundario">Salir</button>
           </div>
         </header>
-
-        <div class="contenido">
+        <div class="contenido contenido-home">
           <div class="encabezado-menu">
-            <h1>Sistema de Control de Cosecha</h1>
-
-            <p>Seleccione una operación</p>
+            <p class="eyebrow">Operación de campo</p>
+            <h1>¿Qué necesita hacer?</h1>
           </div>
-          <div id="sesiones-restaurables" class="card oculto"></div>
-
+          <div
+            id="sesiones-restaurables"
+            class="card sesiones-restaurables oculto"
+          ></div>
           <div class="menu-grid">
-            <button id="btn-menu-asignacion" class="menu-card">
-              <span class="menu-icono">🎫</span>
-
-              <span class="menu-titulo">Asignación de tickets</span>
-
-              <span class="menu-descripcion">
-                Asignar tickets físicos a cosechadores
-              </span>
+            <button id="btn-menu-asignacion" class="home-action-tile">
+              <span class="home-action-tile__icon"
+                ><svg><use href="#icon-ticket"></use></svg
+              ></span>
+              <span class="home-action-tile__title">Asignar tickets</span>
             </button>
-
-            <button id="btn-menu-jaberos" class="menu-card">
-              <span class="menu-icono">👤</span>
-
-              <span class="menu-titulo">Registro de jaberos</span>
-
-              <span class="menu-descripcion">Registrar jaberos en la campaña</span>
+            <button id="btn-menu-jaberos" class="home-action-tile">
+              <span class="home-action-tile__icon"
+                ><svg><use href="#icon-user"></use></svg
+              ></span>
+              <span class="home-action-tile__title">Registrar jaberos</span>
             </button>
-
-            <button id="btn-menu-lectura" class="menu-card">
-              <span class="menu-icono">📦</span>
-
-              <span class="menu-titulo">Lectura de jabas</span>
-
-              <span class="menu-descripcion">Registrar jabas mediante tickets</span>
+            <button id="btn-menu-lectura" class="home-action-tile">
+              <span class="home-action-tile__icon home-action-tile__icon--harvest"
+                ><svg><use href="#icon-crate"></use></svg
+              ></span>
+              <span class="home-action-tile__title">Lectura de jabas</span>
             </button>
           </div>
         </div>
       </section>
 
-      <section id="vista-sync" class="pantalla oculto">
-        <header class="topbar">
-          <button id="btn-volver-sync" class="boton-volver">← Menú</button>
-          <strong>Sincronización</strong>
+      <section id="vista-sync" class="pantalla pantalla-datos oculto">
+        <header class="app-header">
+          <button
+            id="btn-volver-sync"
+            class="icon-button btn-secondary"
+            aria-label="Volver al menú"
+          >
+            <svg aria-hidden="true"><use href="#icon-arrow-left"></use></svg>
+          </button>
+          <div class="app-header__title">Sincronización</div>
+          <span class="app-header__spacer"></span>
         </header>
         <div class="contenido">
-          <h1>Estado de sincronización</h1>
-          <p id="resumen-sync"></p>
-          <div id="operaciones-error"></div>
+          <div class="titulo-pagina titulo-pagina--datos">
+            <p class="eyebrow">Estado local</p>
+            <h1>Registros por sincronizar</h1>
+            <p id="resumen-sync"></p>
+          </div>
+          <div id="operaciones-error" class="lista-sync"></div>
         </div>
       </section>
 
-      <!-- ASIGNACIÓN DE TICKETS -->
-
-      <section id="vista-asignacion" class="pantalla oculto">
-        <header class="topbar">
-          <button id="btn-volver-menu" class="boton-volver">← Menú</button>
-
-          <div class="usuario-topbar">
-            <span class="topbar-label">Operador</span>
-
-            <strong id="nombre-operador">-</strong>
-          </div>
+      <section id="vista-asignacion" class="pantalla pantalla-operativa oculto">
+        <header class="app-header">
+          <button
+            id="btn-volver-menu"
+            class="icon-button btn-secondary"
+            aria-label="Volver al menú"
+          >
+            <svg aria-hidden="true"><use href="#icon-arrow-left"></use></svg>
+          </button>
+          <div class="app-header__title">Asignar tickets</div>
+          <button
+            class="icon-button btn-secondary btn-contexto"
+            data-contexto="asignacion"
+            aria-label="Abrir menú de asignación"
+          >
+            <svg aria-hidden="true"><use href="#icon-more"></use></svg>
+          </button>
         </header>
-
-        <div class="contenido">
-          <div class="titulo-pagina">
-            <h1>Asignación de tickets</h1>
-
-            <p>Vincule un ticket físico con un cosechador</p>
+        <div class="contenido contenido-operativo">
+          <div class="contexto-operador">
+            <span>Operador</span><strong id="nombre-operador">-</strong>
           </div>
-
-          <!-- COSECHADOR -->
-
-          <div class="card">
+          <div class="card step-card step-card--active">
             <div class="cabecera-card">
               <div class="paso-numero">1</div>
-
               <div>
                 <h2>Cosechador</h2>
-
                 <p>Escanee el DNI del cosechador</p>
               </div>
             </div>
-
             <form id="form-cosechador">
-              <div class="campo-con-teclado">
+              <div class="campo-con-teclado scan-input">
+                <span class="scan-input__icon"
+                  ><svg aria-hidden="true"><use href="#icon-scan"></use></svg
+                ></span>
                 <input
                   id="dni-cosechador"
                   class="input-grande"
@@ -172,42 +213,38 @@
                 />
                 <button
                   type="button"
-                  class="btn-teclado"
+                  class="btn-teclado icon-button"
                   aria-label="Mostrar teclado"
                   aria-pressed="false"
                   aria-controls="dni-cosechador"
                 >
-                  ⌨
+                  <svg aria-hidden="true"><use href="#icon-keyboard"></use></svg>
                 </button>
               </div>
             </form>
-
             <div id="info-cosechador" class="resultado-persona oculto">
-              <span class="check">✓</span>
-
+              <span class="check"
+                ><svg aria-hidden="true"><use href="#icon-check"></use></svg
+              ></span>
               <div>
-                <strong id="nombre-cosechador"></strong>
-
-                <span id="campania-cosechador"></span>
+                <strong id="nombre-cosechador"></strong
+                ><span id="campania-cosechador"></span>
               </div>
             </div>
           </div>
-
-          <!-- TICKET -->
-
-          <div id="card-ticket" class="card deshabilitado">
+          <div id="card-ticket" class="card step-card deshabilitado">
             <div class="cabecera-card">
               <div class="paso-numero">2</div>
-
               <div>
                 <h2>Ticket</h2>
-
-                <p>Escanee un sticker del ticket</p>
+                <p>Escanee el ticket físico</p>
               </div>
             </div>
-
             <form id="form-ticket">
-              <div class="campo-con-teclado">
+              <div class="campo-con-teclado scan-input">
+                <span class="scan-input__icon"
+                  ><svg aria-hidden="true"><use href="#icon-ticket"></use></svg
+                ></span>
                 <input
                   id="codigo-ticket"
                   class="input-grande"
@@ -219,55 +256,56 @@
                 />
                 <button
                   type="button"
-                  class="btn-teclado"
+                  class="btn-teclado icon-button"
                   aria-label="Mostrar teclado"
                   aria-pressed="false"
                   aria-controls="codigo-ticket"
                   disabled
                 >
-                  ⌨
+                  <svg aria-hidden="true"><use href="#icon-keyboard"></use></svg>
                 </button>
               </div>
             </form>
           </div>
-
-          <div id="resultado" class="resultado oculto"></div>
+          <div id="resultado" class="resultado oculto" aria-live="polite"></div>
         </div>
       </section>
 
-      <!-- REGISTRO DE JABEROS -->
-
-      <section id="vista-jaberos" class="pantalla oculto">
-        <header class="topbar">
-          <button id="btn-volver-menu-jaberos" class="boton-volver">← Menú</button>
-
-          <div class="usuario-topbar">
-            <span class="topbar-label">Operador</span>
-
-            <strong id="jaberos-operador">-</strong>
-          </div>
+      <section id="vista-jaberos" class="pantalla pantalla-operativa oculto">
+        <header class="app-header">
+          <button
+            id="btn-volver-menu-jaberos"
+            class="icon-button btn-secondary"
+            aria-label="Volver al menú"
+          >
+            <svg aria-hidden="true"><use href="#icon-arrow-left"></use></svg>
+          </button>
+          <div class="app-header__title">Registrar jabero</div>
+          <button
+            class="icon-button btn-secondary btn-contexto"
+            data-contexto="jaberos"
+            aria-label="Abrir menú de jaberos"
+          >
+            <svg aria-hidden="true"><use href="#icon-more"></use></svg>
+          </button>
         </header>
-
-        <div class="contenido">
-          <div class="titulo-pagina">
-            <h1>Registro de jaberos</h1>
-
-            <p>Escanee el DNI del trabajador</p>
+        <div class="contenido contenido-operativo">
+          <div class="contexto-operador">
+            <span>Operador</span><strong id="jaberos-operador">-</strong>
           </div>
-
-          <div class="card">
+          <div class="card step-card step-card--active">
             <div class="cabecera-card">
               <div class="paso-numero">1</div>
-
               <div>
                 <h2>Identificar trabajador</h2>
-
-                <p>Escanee el código de barras de su DNI</p>
+                <p>Escanee el código del DNI</p>
               </div>
             </div>
-
             <form id="form-jabero">
-              <div class="campo-con-teclado">
+              <div class="campo-con-teclado scan-input">
+                <span class="scan-input__icon"
+                  ><svg aria-hidden="true"><use href="#icon-scan"></use></svg
+                ></span>
                 <input
                   id="dni-jabero"
                   class="input-grande"
@@ -279,73 +317,68 @@
                 />
                 <button
                   type="button"
-                  class="btn-teclado"
+                  class="btn-teclado icon-button"
                   aria-label="Mostrar teclado"
                   aria-pressed="false"
                   aria-controls="dni-jabero"
                 >
-                  ⌨
+                  <svg aria-hidden="true"><use href="#icon-keyboard"></use></svg>
                 </button>
               </div>
             </form>
           </div>
-
-          <div id="resultado-jabero" class="resultado oculto"></div>
+          <div id="resultado-jabero" class="resultado oculto" aria-live="polite"></div>
         </div>
       </section>
 
-      <!-- LECTURA DE JABAS -->
-
-      <section id="vista-lectura" class="pantalla oculto">
-        <header class="topbar">
-          <button id="btn-volver-menu-lectura" class="boton-volver">← Menú</button>
-
-          <div class="usuario-topbar">
-            <span class="topbar-label">Operador</span>
-
-            <strong id="lectura-operador">-</strong>
-          </div>
+      <section id="vista-lectura" class="pantalla pantalla-operativa oculto">
+        <header class="app-header">
+          <button
+            id="btn-volver-menu-lectura"
+            class="icon-button btn-secondary"
+            aria-label="Volver al menú"
+          >
+            <svg aria-hidden="true"><use href="#icon-arrow-left"></use></svg>
+          </button>
+          <div class="app-header__title">Lectura de jabas</div>
+          <button
+            class="icon-button btn-secondary btn-contexto"
+            data-contexto="lectura"
+            aria-label="Abrir menú de lectura"
+          >
+            <svg aria-hidden="true"><use href="#icon-more"></use></svg>
+          </button>
         </header>
-
-        <div class="contenido">
-          <div class="titulo-pagina">
-            <h1>Lectura de jabas</h1>
-
-            <p>Registre la producción mediante los tickets</p>
+        <div class="contenido contenido-operativo">
+          <div class="contexto-operador">
+            <span>Operador</span><strong id="lectura-operador">-</strong>
           </div>
-
-          <!-- CONFIGURACIÓN DE SESIÓN -->
-
-          <div id="configuracion-lectura">
-            <div class="card">
+          <div id="configuracion-lectura" class="flujo-lectura-config">
+            <div class="card step-card step-card--active">
               <div class="cabecera-card">
                 <div class="paso-numero">1</div>
-
                 <div>
                   <h2>Lote</h2>
-
                   <p>Seleccione el lote de trabajo</p>
                 </div>
               </div>
-
               <select id="lote-lectura" class="select-grande">
                 <option value="">Cargando lotes...</option>
               </select>
             </div>
-
-            <div class="card">
+            <div class="card step-card step-card--active">
               <div class="cabecera-card">
                 <div class="paso-numero">2</div>
-
                 <div>
                   <h2>Jabero</h2>
-
                   <p>Escanee el DNI del encargado</p>
                 </div>
               </div>
-
-              <form id="form-iniciar-lectura">
-                <div class="campo-con-teclado">
+              <form id="form-iniciar-lectura" class="form-stack">
+                <div class="campo-con-teclado scan-input">
+                  <span class="scan-input__icon"
+                    ><svg aria-hidden="true"><use href="#icon-scan"></use></svg
+                  ></span>
                   <input
                     id="dni-jabero-lectura"
                     class="input-grande"
@@ -357,54 +390,46 @@
                   />
                   <button
                     type="button"
-                    class="btn-teclado"
+                    class="btn-teclado icon-button"
                     aria-label="Mostrar teclado"
                     aria-pressed="false"
                     aria-controls="dni-jabero-lectura"
                   >
-                    ⌨
+                    <svg aria-hidden="true"><use href="#icon-keyboard"></use></svg>
                   </button>
                 </div>
-
-                <button type="submit">Iniciar lectura</button>
+                <button type="submit" class="btn-primary">Iniciar lectura</button>
               </form>
             </div>
           </div>
-
-          <!-- SESIÓN ACTIVA -->
-
           <div id="sesion-lectura-activa" class="oculto">
-            <div class="card sesion-resumen">
-              <span class="estado-activo">● SESIÓN ACTIVA</span>
-
-              <h2 id="sesion-jabero">-</h2>
-
+            <div class="session-status-card">
+              <div class="session-status-card__top">
+                <span class="estado-activo"
+                  ><span class="status-dot"></span>Sesión activa</span
+                >
+                <strong id="sesion-jabero">-</strong>
+              </div>
               <div class="datos-sesion">
-                <span>
-                  Lote:
-                  <strong id="sesion-lote">-</strong>
-                </span>
-
-                <span>
-                  Variedad:
-                  <strong id="sesion-variedad">-</strong>
-                </span>
+                <span>Lote <strong id="sesion-lote">-</strong></span>
+                <span>Variedad <strong id="sesion-variedad">-</strong></span>
               </div>
             </div>
-
-            <div class="card">
-              <div class="cabecera-card">
-                <div class="paso-numero">✓</div>
-
+            <div class="card step-card step-card--active scan-dominante">
+              <div class="cabecera-card cabecera-card--compacta">
+                <div class="paso-numero paso-numero--check">
+                  <svg aria-hidden="true"><use href="#icon-check"></use></svg>
+                </div>
                 <div>
                   <h2>Escanear ticket</h2>
-
                   <p>Cada lectura registra una jaba</p>
                 </div>
               </div>
-
               <form id="form-lectura-ticket">
-                <div class="campo-con-teclado">
+                <div class="campo-con-teclado scan-input">
+                  <span class="scan-input__icon"
+                    ><svg aria-hidden="true"><use href="#icon-scan"></use></svg
+                  ></span>
                   <input
                     id="ticket-lectura"
                     class="input-grande"
@@ -415,45 +440,124 @@
                   />
                   <button
                     type="button"
-                    class="btn-teclado"
+                    class="btn-teclado icon-button"
                     aria-label="Mostrar teclado"
                     aria-pressed="false"
                     aria-controls="ticket-lectura"
                   >
-                    ⌨
+                    <svg aria-hidden="true"><use href="#icon-keyboard"></use></svg>
                   </button>
                 </div>
               </form>
-
-              <div id="resultado-lectura" class="resultado oculto"></div>
+              <div
+                id="resultado-lectura"
+                class="resultado oculto"
+                aria-live="polite"
+              ></div>
             </div>
-
             <div class="estadisticas-lectura">
-              <div class="stat-card">
-                <span class="stat-label">Total sesión</span>
-
-                <strong id="total-sesion" class="stat-numero">0</strong>
+              <div class="metric-card metric-card--primary">
+                <span class="stat-label">Total sesión</span
+                ><strong id="total-sesion" class="stat-numero">0</strong>
               </div>
-
-              <div class="stat-card">
+              <div class="metric-card">
                 <span id="etiqueta-cosechador" class="stat-label"
                   >Cosechador actual</span
-                >
-
-                <strong id="total-cosechador" class="stat-numero">0</strong>
+                ><strong id="total-cosechador" class="stat-numero">0</strong>
               </div>
             </div>
-
-            <button id="btn-finalizar-lectura" class="boton-finalizar">
+            <button id="btn-finalizar-lectura" class="btn-secondary btn-finalizar">
               Finalizar lectura
             </button>
           </div>
+          <div
+            id="mensaje-modulo-lectura"
+            class="resultado oculto"
+            aria-live="polite"
+          ></div>
+        </div>
+      </section>
 
-          <div id="mensaje-modulo-lectura" class="resultado oculto"></div>
+      <section id="vista-consulta" class="pantalla pantalla-datos oculto">
+        <header class="app-header">
+          <button
+            id="btn-volver-consulta"
+            class="icon-button btn-secondary"
+            aria-label="Volver a la operación"
+          >
+            <svg aria-hidden="true"><use href="#icon-arrow-left"></use></svg>
+          </button>
+          <div id="titulo-consulta-header" class="app-header__title">Consulta</div>
+          <span class="app-header__spacer"></span>
+        </header>
+        <div class="contenido contenido-datos">
+          <div class="titulo-pagina titulo-pagina--datos">
+            <p class="eyebrow">Consulta</p>
+            <h1 id="titulo-consulta">Consulta</h1>
+            <p id="descripcion-consulta">Revise la información disponible.</p>
+          </div>
+          <div class="filter-bar">
+            <label class="search-field" for="consulta-busqueda">
+              <svg aria-hidden="true"><use href="#icon-search"></use></svg>
+              <input id="consulta-busqueda" type="search" placeholder="Buscar..." />
+            </label>
+            <button
+              type="button"
+              class="icon-button btn-secondary"
+              aria-label="Filtros"
+            >
+              <svg aria-hidden="true"><use href="#icon-filter"></use></svg>
+            </button>
+          </div>
+          <div
+            id="consulta-chips"
+            class="filter-chips"
+            aria-label="Filtros rápidos"
+          ></div>
+          <div class="industrial-table-wrap">
+            <table class="industrial-table">
+              <thead>
+                <tr id="consulta-tabla-head"></tr>
+              </thead>
+              <tbody id="consulta-tabla-body"></tbody>
+            </table>
+            <div id="consulta-empty" class="empty-state">
+              <span class="empty-state__icon"
+                ><svg aria-hidden="true"><use href="#icon-search"></use></svg
+              ></span>
+              <strong>Vista de consulta preparada</strong>
+              <p>
+                Esta información aparecerá aquí cuando la vista tenga datos conectados.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
     </main>
 
+    <div id="context-overlay" class="bottom-sheet-overlay oculto" aria-hidden="true">
+      <section
+        id="context-sheet"
+        class="bottom-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="context-title"
+      >
+        <div class="bottom-sheet__handle"></div>
+        <div class="bottom-sheet__header">
+          <h2 id="context-title">Opciones</h2>
+          <button
+            id="btn-cerrar-contexto"
+            class="icon-button btn-secondary"
+            type="button"
+            aria-label="Cerrar menú"
+          >
+            <svg aria-hidden="true"><use href="#icon-close"></use></svg>
+          </button>
+        </div>
+        <div id="context-options" class="bottom-sheet__options"></div>
+      </section>
+    </div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

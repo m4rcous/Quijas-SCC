@@ -39,6 +39,7 @@ const vistaAsignacion = document.querySelector('#vista-asignacion')
 const vistaJaberos = document.querySelector('#vista-jaberos')
 const vistaLectura = document.querySelector('#vista-lectura')
 const vistaSync = document.querySelector('#vista-sync')
+const vistaConsulta = document.querySelector('#vista-consulta')
 const sesionesRestaurables = document.querySelector('#sesiones-restaurables')
 const resumenSync = document.querySelector('#resumen-sync')
 const operacionesError = document.querySelector('#operaciones-error')
@@ -101,6 +102,97 @@ const totalCosechador = document.querySelector('#total-cosechador')
 const btnFinalizarLectura = document.querySelector('#btn-finalizar-lectura')
 const mensajeModuloLectura = document.querySelector('#mensaje-modulo-lectura')
 
+// NAVEGACIÓN CONTEXTUAL Y VISTAS DE CONSULTA
+
+const contextOverlay = document.querySelector('#context-overlay')
+const contextTitle = document.querySelector('#context-title')
+const contextOptions = document.querySelector('#context-options')
+const btnCerrarContexto = document.querySelector('#btn-cerrar-contexto')
+const btnVolverConsulta = document.querySelector('#btn-volver-consulta')
+const tituloConsultaHeader = document.querySelector('#titulo-consulta-header')
+const tituloConsulta = document.querySelector('#titulo-consulta')
+const descripcionConsulta = document.querySelector('#descripcion-consulta')
+const consultaBusqueda = document.querySelector('#consulta-busqueda')
+const consultaChips = document.querySelector('#consulta-chips')
+const consultaTablaHead = document.querySelector('#consulta-tabla-head')
+const consultaTablaBody = document.querySelector('#consulta-tabla-body')
+const consultaEmpty = document.querySelector('#consulta-empty')
+
+const consultasContextuales = {
+  asignacion: {
+    titulo: 'Asignación de tickets',
+    vistaOperativa: vistaAsignacion,
+    opciones: [
+      { etiqueta: 'Operar', operativa: true },
+      {
+        etiqueta: 'Asignados hoy',
+        titulo: 'Asignados hoy',
+        descripcion: 'Tickets asignados durante la jornada.',
+        columnas: ['Cosechador', 'Ticket', 'Hora'],
+        chips: ['Todos', 'Recientes'],
+        vacio: 'No hay tickets asignados hoy.'
+      },
+      {
+        etiqueta: 'Buscar asignación',
+        titulo: 'Buscar asignación',
+        descripcion: 'Busque por cosechador o código de ticket.',
+        columnas: ['Cosechador', 'Ticket', 'Hora'],
+        chips: ['Todos'],
+        vacio: 'No hay asignaciones para mostrar.'
+      }
+    ]
+  },
+  jaberos: {
+    titulo: 'Registro de jaberos',
+    vistaOperativa: vistaJaberos,
+    opciones: [
+      { etiqueta: 'Registrar', operativa: true },
+      {
+        etiqueta: 'Jaberos de campaña',
+        titulo: 'Jaberos de campaña',
+        descripcion: 'Personal registrado como jabero en la campaña actual.',
+        columnas: ['Jabero', 'DNI', 'Estado'],
+        chips: ['Todos', 'Activos'],
+        vacio: 'No hay jaberos registrados en esta campaña.'
+      },
+      {
+        etiqueta: 'Buscar',
+        titulo: 'Buscar jabero',
+        descripcion: 'Busque personal registrado en la campaña.',
+        columnas: ['Jabero', 'DNI', 'Estado'],
+        chips: ['Todos'],
+        vacio: 'No hay jaberos para mostrar.'
+      }
+    ]
+  },
+  lectura: {
+    titulo: 'Lectura de jabas',
+    vistaOperativa: vistaLectura,
+    opciones: [
+      { etiqueta: 'Escanear', operativa: true },
+      {
+        etiqueta: 'Cosechadores y jabas',
+        titulo: 'Cosechadores y jabas',
+        descripcion: 'Resumen de producción de la sesión.',
+        columnas: ['Cosechador', 'Jabas', 'Última lectura'],
+        columnasNumericas: ['Jabas'],
+        chips: ['Todos', 'Con jabas'],
+        vacio: 'Aún no se han registrado jabas en esta sesión.'
+      },
+      {
+        etiqueta: 'Sesiones',
+        titulo: 'Sesiones',
+        descripcion: 'Sesiones de lectura disponibles para consulta.',
+        columnas: ['Jabero', 'Lote', 'Estado'],
+        chips: ['Todas', 'Activas'],
+        vacio: 'No hay sesiones para mostrar.'
+      }
+    ]
+  }
+}
+
+let vistaOperativaConsulta = vistaMenu
+
 const tecladosManuales = new Map(
   [
     [dniOperadorInput, 'numeric'],
@@ -129,6 +221,105 @@ function desactivarTecladoManual(...inputs) {
 let operador = null
 let cosechador = null
 let sesionLectura = null
+
+document.querySelectorAll('.btn-contexto').forEach((boton) => {
+  boton.addEventListener('click', () => abrirMenuContextual(boton.dataset.contexto))
+})
+
+btnCerrarContexto.addEventListener('click', cerrarMenuContextual)
+contextOverlay.addEventListener('click', (event) => {
+  if (event.target === contextOverlay) cerrarMenuContextual()
+})
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !contextOverlay.classList.contains('oculto')) {
+    cerrarMenuContextual()
+  }
+})
+
+btnVolverConsulta.addEventListener('click', () => {
+  mostrarVista(vistaOperativaConsulta)
+})
+
+function abrirMenuContextual(contexto) {
+  const configuracion = consultasContextuales[contexto]
+  if (!configuracion) return
+
+  vistaOperativaConsulta = configuracion.vistaOperativa
+  contextTitle.textContent = configuracion.titulo
+  contextOptions.replaceChildren()
+
+  for (const opcion of configuracion.opciones) {
+    const boton = document.createElement('button')
+    boton.type = 'button'
+    boton.className = opcion.operativa
+      ? 'bottom-sheet__option bottom-sheet__option--active'
+      : 'bottom-sheet__option'
+    boton.textContent = opcion.etiqueta
+    boton.addEventListener('click', () => {
+      cerrarMenuContextual()
+      if (opcion.operativa) {
+        mostrarVista(configuracion.vistaOperativa)
+        return
+      }
+      mostrarConsulta(opcion)
+    })
+    contextOptions.append(boton)
+  }
+
+  contextOverlay.classList.remove('oculto')
+  contextOverlay.setAttribute('aria-hidden', 'false')
+  btnCerrarContexto.focus()
+}
+
+function cerrarMenuContextual() {
+  contextOverlay.classList.add('oculto')
+  contextOverlay.setAttribute('aria-hidden', 'true')
+}
+
+function mostrarConsulta(configuracion) {
+  tituloConsultaHeader.textContent = configuracion.titulo
+  tituloConsulta.textContent = configuracion.titulo
+  descripcionConsulta.textContent = configuracion.descripcion
+  consultaBusqueda.value = ''
+  consultaBusqueda.placeholder = `Buscar en ${configuracion.titulo.toLowerCase()}...`
+
+  consultaChips.replaceChildren()
+  configuracion.chips.forEach((chip, indice) => {
+    const boton = document.createElement('button')
+    boton.type = 'button'
+    boton.className = `filter-chip${indice === 0 ? ' selected' : ''}`
+    boton.textContent = chip
+    boton.setAttribute('aria-pressed', String(indice === 0))
+    boton.addEventListener('click', () => {
+      consultaChips.querySelectorAll('.filter-chip').forEach((item) => {
+        const seleccionado = item === boton
+        item.classList.toggle('selected', seleccionado)
+        item.setAttribute('aria-pressed', String(seleccionado))
+      })
+    })
+    consultaChips.append(boton)
+  })
+
+  consultaTablaHead.replaceChildren()
+  const columnasNumericas = configuracion.columnasNumericas ?? []
+  configuracion.columnas.forEach((columna) => {
+    const th = document.createElement('th')
+    th.scope = 'col'
+    th.textContent = columna
+    if (columnasNumericas.includes(columna)) {
+      th.classList.add('industrial-table__numeric')
+    }
+    consultaTablaHead.append(th)
+  })
+  consultaTablaBody.replaceChildren()
+  consultaEmpty.querySelector('strong').textContent = configuracion.vacio
+  consultaEmpty.querySelector('p').textContent =
+    'La estructura visual está lista para conectarse cuando exista la consulta de datos.'
+  consultaEmpty.classList.remove('oculto')
+
+  mostrarVista(vistaConsulta)
+  consultaBusqueda.focus()
+}
 
 window.addEventListener('online', async () => {
   console.log('Conexión recuperada')
@@ -230,7 +421,7 @@ async function actualizarVistaSync() {
   }
   for (const operacion of errores) {
     const card = document.createElement('article')
-    card.className = 'card'
+    card.className = 'card sync-error-card'
     const titulo = document.createElement('h2')
     titulo.textContent = operacion.tipo.replaceAll('_', ' ')
     const detalle = document.createElement('p')
@@ -249,6 +440,7 @@ async function actualizarVistaSync() {
     const acciones = document.createElement('div')
     acciones.className = 'acciones-sync'
     const reintentar = document.createElement('button')
+    reintentar.className = 'btn-primary'
     reintentar.textContent = 'Reintentar'
     reintentar.addEventListener('click', async () => {
       await reintentarOperacion(operacion.id)
@@ -260,7 +452,7 @@ async function actualizarVistaSync() {
     const descarte = evaluarDescarteOperacion(operacion, operaciones)
     if (descarte.permitido) {
       const descartar = document.createElement('button')
-      descartar.className = 'boton-secundario'
+      descartar.className = 'btn-danger'
       descartar.textContent = 'Descartar'
       descartar.addEventListener('click', async () => {
         if (await descartarOperacion(operacion.id)) {
@@ -292,12 +484,13 @@ async function mostrarSesionesActivas() {
   sesionesRestaurables.append(titulo)
   for (const sesion of sesiones) {
     const fila = document.createElement('div')
-    fila.className = 'card'
+    fila.className = 'card sesion-restaurable'
     const descripcion = document.createElement('p')
     descripcion.textContent = `${sesion.jabero} · ${sesion.lote_codigo} · ${sesion.variedad}`
     const total = document.createElement('p')
     total.textContent = `${await contarLecturasSesion(sesion.id)} jabas locales`
     const continuar = document.createElement('button')
+    continuar.className = 'btn-primary'
     continuar.textContent = 'Continuar lectura'
     continuar.addEventListener('click', async () => {
       sesionLectura = sesion
@@ -305,7 +498,7 @@ async function mostrarSesionesActivas() {
       await mostrarSesionLectura()
     })
     const finalizar = document.createElement('button')
-    finalizar.className = 'boton-finalizar'
+    finalizar.className = 'btn-secondary'
     finalizar.textContent = 'Finalizar sesión'
     finalizar.addEventListener('click', async () => {
       if (!window.confirm('¿Finalizar la sesión de lectura?')) return
@@ -478,12 +671,14 @@ formJabero.addEventListener('submit', async (event) => {
 
 function mostrarVista(vista) {
   desactivarTecladoManual()
+  cerrarMenuContextual()
   vistaLogin.classList.add('oculto')
   vistaMenu.classList.add('oculto')
   vistaAsignacion.classList.add('oculto')
   vistaJaberos.classList.add('oculto')
   vistaLectura.classList.add('oculto')
   vistaSync.classList.add('oculto')
+  vistaConsulta.classList.add('oculto')
   vista.classList.remove('oculto')
 }
 
@@ -568,21 +763,26 @@ async function actualizarEstadoConexion() {
   if (!navigator.onLine) {
     estadoConexion.textContent =
       pendientes === undefined
-        ? '● Sin conexión'
-        : `● Sin conexión · ${pendientes} pendientes`
+        ? 'Sin conexión'
+        : `Sin conexión · ${pendientes} pendientes`
     estadoConexion.className = 'estado-conexion offline'
     return
   }
 
   if (errores > 0) {
-    estadoConexion.textContent = `⚠ ${errores} errores de sincronización`
+    estadoConexion.textContent = `${errores} ${errores === 1 ? 'error de sincronización' : 'errores de sincronización'}`
     estadoConexion.className = 'estado-conexion error-sync'
     return
   }
 
-  estadoConexion.textContent =
-    pendientes > 0 ? `● En línea · ${pendientes} pendientes` : '● En línea'
-  estadoConexion.className = 'estado-conexion online'
+  if (pendientes > 0) {
+    estadoConexion.textContent = `${pendientes} ${pendientes === 1 ? 'registro pendiente' : 'registros pendientes'}`
+    estadoConexion.className = 'estado-conexion warning-sync'
+    return
+  }
+
+  estadoConexion.textContent = ''
+  estadoConexion.className = 'estado-conexion oculto'
 }
 
 // RESTAURAR SESIÓN AL RECARGAR
