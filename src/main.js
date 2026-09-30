@@ -17,6 +17,7 @@ import {
   obtenerTicket,
   obtenerTickets,
   obtenerTrabajador,
+  obtenerTrabajadores,
   obtenerSesionesActivas,
   obtenerSesionActivaJabero,
   obtenerUltimaLecturaSesion,
@@ -37,6 +38,11 @@ import {
   formatearHoraAsignacion,
   obtenerBadgeEstadoAsignacion
 } from './modules/asignadosHoy'
+import {
+  FILTROS_JABEROS_CAMPANIA,
+  filtrarJaberosCampania,
+  obtenerBadgeEstadoJabero
+} from './modules/jaberosCampania'
 
 // VISTAS
 
@@ -157,11 +163,12 @@ const consultasContextuales = {
     opciones: [
       { etiqueta: 'Registrar', operativa: true },
       {
+        id: 'jaberos-campania',
         etiqueta: 'Jaberos de campaña',
         titulo: 'Jaberos de campaña',
         descripcion: 'Personal registrado como jabero en la campaña actual.',
         columnas: ['Jabero', 'DNI', 'Estado'],
-        chips: ['Todos', 'Activos'],
+        chips: ['Todos', 'Pendientes', 'Error'],
         vacio: 'No hay jaberos registrados en esta campaña.'
       },
       {
@@ -204,6 +211,8 @@ let vistaOperativaConsulta = vistaMenu
 let consultaActual = null
 let ticketsConsultaActual = []
 let filtroAsignadosHoy = FILTROS_ASIGNADOS_HOY.TODOS
+let trabajadoresConsultaActual = []
+let filtroJaberosCampania = FILTROS_JABEROS_CAMPANIA.TODOS
 
 const tecladosManuales = new Map(
   [
@@ -298,6 +307,13 @@ async function mostrarConsulta(configuracion) {
 
   if (configuracion.id === 'asignados-hoy') {
     await prepararConsultaAsignadosHoy()
+    mostrarVista(vistaConsulta)
+    consultaBusqueda.focus()
+    return
+  }
+
+  if (configuracion.id === 'jaberos-campania') {
+    await prepararConsultaJaberosCampania()
     mostrarVista(vistaConsulta)
     consultaBusqueda.focus()
     return
@@ -448,8 +464,118 @@ function renderAsignadosHoy() {
   consultaEmpty.classList.remove('oculto')
 }
 
+async function prepararConsultaJaberosCampania() {
+  consultaBusqueda.placeholder = 'Buscar nombre o DNI...'
+  filtroJaberosCampania = FILTROS_JABEROS_CAMPANIA.TODOS
+  trabajadoresConsultaActual = await obtenerTrabajadores()
+
+  const filtros = [
+    ['Todos', FILTROS_JABEROS_CAMPANIA.TODOS],
+    ['Pendientes', FILTROS_JABEROS_CAMPANIA.PENDIENTE],
+    ['Error', FILTROS_JABEROS_CAMPANIA.ERROR]
+  ]
+
+  consultaChips.replaceChildren()
+  filtros.forEach(([etiqueta, valor], indice) => {
+    const boton = document.createElement('button')
+    boton.type = 'button'
+    boton.className = `filter-chip${indice === 0 ? ' selected' : ''}`
+    boton.textContent = etiqueta
+    boton.dataset.filtro = valor
+    boton.setAttribute('aria-pressed', String(indice === 0))
+    boton.addEventListener('click', () => {
+      filtroJaberosCampania = valor
+      consultaChips.querySelectorAll('.filter-chip').forEach((item) => {
+        const seleccionado = item === boton
+        item.classList.toggle('selected', seleccionado)
+        item.setAttribute('aria-pressed', String(seleccionado))
+      })
+      renderJaberosCampania()
+    })
+    consultaChips.append(boton)
+  })
+
+  consultaTablaHead.replaceChildren()
+  for (const columna of ['Jabero', 'DNI', 'Estado']) {
+    const th = document.createElement('th')
+    th.scope = 'col'
+    th.textContent = columna
+    consultaTablaHead.append(th)
+  }
+
+  renderJaberosCampania()
+}
+
+function renderJaberosCampania() {
+  const jaberosDisponibles = filtrarJaberosCampania(trabajadoresConsultaActual)
+  const jaberos = filtrarJaberosCampania(trabajadoresConsultaActual, {
+    busqueda: consultaBusqueda.value,
+    filtro: filtroJaberosCampania
+  })
+
+  consultaTablaBody.replaceChildren()
+
+  for (const trabajador of jaberos) {
+    const fila = document.createElement('tr')
+
+    const nombreCell = document.createElement('td')
+    nombreCell.className = 'industrial-table__person'
+    const nombre = document.createElement('strong')
+    nombre.textContent = trabajador.nombre || 'Sin nombre'
+    nombreCell.append(nombre)
+
+    const dniCell = document.createElement('td')
+    dniCell.textContent = trabajador.dni || '—'
+
+    const estadoCell = document.createElement('td')
+    const badge = obtenerBadgeEstadoJabero(trabajador.estado_sync_jabero)
+    if (badge) {
+      const estado = document.createElement('span')
+      estado.className = `sync-badge ${badge.clase}`
+      estado.textContent = badge.etiqueta
+      estadoCell.append(estado)
+    } else {
+      estadoCell.textContent = '—'
+    }
+
+    fila.append(nombreCell, dniCell, estadoCell)
+    consultaTablaBody.append(fila)
+  }
+
+  const total = jaberos.length
+  consultaContador.textContent = `${total} ${total === 1 ? 'jabero' : 'jaberos'}`
+  consultaContador.classList.remove('oculto')
+
+  if (total > 0) {
+    consultaEmpty.classList.add('oculto')
+    return
+  }
+
+  const hayBusqueda = consultaBusqueda.value.trim().length > 0
+  let titulo = 'No hay jaberos registrados en esta campaña.'
+  let detalle = 'Los registros sincronizados y pendientes aparecerán aquí.'
+
+  if (hayBusqueda) {
+    titulo = 'No se encontraron jaberos.'
+    detalle = 'Pruebe con otro nombre o DNI.'
+  } else if (jaberosDisponibles.length > 0) {
+    if (filtroJaberosCampania === FILTROS_JABEROS_CAMPANIA.PENDIENTE) {
+      titulo = 'No hay jaberos pendientes de sincronización.'
+      detalle = 'No existen registros locales pendientes en este momento.'
+    } else if (filtroJaberosCampania === FILTROS_JABEROS_CAMPANIA.ERROR) {
+      titulo = 'No hay registros de jabero con error.'
+      detalle = 'No existen intentos fallidos de registro en este momento.'
+    }
+  }
+
+  consultaEmpty.querySelector('strong').textContent = titulo
+  consultaEmpty.querySelector('p').textContent = detalle
+  consultaEmpty.classList.remove('oculto')
+}
+
 consultaBusqueda.addEventListener('input', () => {
   if (consultaActual?.id === 'asignados-hoy') renderAsignadosHoy()
+  if (consultaActual?.id === 'jaberos-campania') renderJaberosCampania()
 })
 
 window.addEventListener('online', async () => {

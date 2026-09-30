@@ -184,6 +184,29 @@ test('jabero pendiente sobrevive la recarga de caché, error revoca rol y reinte
   assert.equal((await obtenerTrabajador('80000003')).roles.includes('JABERO'), true)
 })
 
+test('jabero sincronizado confirmado por servidor conserva el rol al recargar caché', async () => {
+  await guardarCache({
+    campania: '2026',
+    sincronizado_en: '',
+    trabajadores: [{ dni: '80000005', nombre: 'Rosa', roles: [] }],
+    lotes: [],
+    tickets: []
+  })
+  const op = await agregarOperacion('REGISTRAR_JABERO', { dniTrabajador: '80000005' })
+  await agregarRolTrabajador('80000005', 'JABERO', op.id)
+  await marcarJabero('80000005', 'SINCRONIZADO', op.id)
+
+  await guardarCache({
+    campania: '2026',
+    sincronizado_en: '',
+    trabajadores: [{ dni: '80000005', nombre: 'Rosa', roles: ['JABERO'] }],
+    lotes: [],
+    tickets: []
+  })
+
+  assert.equal((await obtenerTrabajador('80000005')).roles.includes('JABERO'), true)
+})
+
 test('login usa caché únicamente para fallo de red', async () => {
   const local = async () => ({ dni: '12345678', nombre: 'Operador' })
   const guardar = async () => {

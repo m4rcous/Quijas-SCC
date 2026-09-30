@@ -107,11 +107,7 @@ export async function guardarCache(cache) {
   for (const local of rolesLocales) {
     const actual = await trabajadoresStore.get(local.dni)
     if (actual) {
-      if (
-        local.estado_sync_jabero === 'SINCRONIZADO' &&
-        !actual.roles?.includes('JABERO')
-      )
-        continue
+      if (local.estado_sync_jabero === 'SINCRONIZADO') continue
       if (local.estado_sync_jabero === 'PENDIENTE') {
         actual.roles = [...new Set([...(actual.roles ?? []), 'JABERO'])]
       } else {
@@ -152,6 +148,12 @@ export async function obtenerTrabajador(dni) {
   const db = await dbPromise
 
   return db.get('trabajadores', dni)
+}
+
+export async function obtenerTrabajadores() {
+  const db = await dbPromise
+
+  return db.getAll('trabajadores')
 }
 
 export async function agregarRolTrabajador(dni, rol, operacionId = null) {
