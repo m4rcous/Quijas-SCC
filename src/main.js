@@ -70,6 +70,13 @@ import {
   reemplazarRankingCosechadores,
   resumirRankingCosechadores
 } from './modules/rankingCosechadores'
+import {
+  esErrorConexionProduccion,
+  formatearFechaCalendario,
+  obtenerProduccionDiaria,
+  reemplazarProduccionDiaria,
+  resumirProduccionDiaria
+} from './modules/produccionDiaria'
 
 // VISTAS
 
@@ -82,6 +89,7 @@ const vistaSync = document.querySelector('#vista-sync')
 const vistaConsulta = document.querySelector('#vista-consulta')
 const vistaReportes = document.querySelector('#vista-reportes')
 const vistaRankingCosechadores = document.querySelector('#vista-ranking-cosechadores')
+const vistaProduccionDiaria = document.querySelector('#vista-produccion-diaria')
 const sesionesRestaurables = document.querySelector('#sesiones-restaurables')
 const resumenSync = document.querySelector('#resumen-sync')
 const operacionesError = document.querySelector('#operaciones-error')
@@ -114,6 +122,15 @@ const rankingResumen = document.querySelector('#ranking-resumen')
 const rankingFeedback = document.querySelector('#ranking-feedback')
 const rankingTablaBody = document.querySelector('#ranking-tabla-body')
 const rankingEmpty = document.querySelector('#ranking-empty')
+const btnReporteProduccion = document.querySelector('#btn-reporte-produccion')
+const btnVolverProduccion = document.querySelector('#btn-volver-produccion')
+const btnActualizarProduccion = document.querySelector('#btn-actualizar-produccion')
+const btnReintentarProduccion = document.querySelector('#btn-reintentar-produccion')
+const produccionCampania = document.querySelector('#produccion-campania')
+const produccionResumen = document.querySelector('#produccion-resumen')
+const produccionFeedback = document.querySelector('#produccion-feedback')
+const produccionTablaBody = document.querySelector('#produccion-tabla-body')
+const produccionEmpty = document.querySelector('#produccion-empty')
 
 // ASIGNACIÓN
 
@@ -265,6 +282,8 @@ let ordenCosechadoresJabas = ORDEN_COSECHADORES_JABAS.MAS_JABAS
 let sesionesConsultaActual = []
 let filtroSesionesLectura = FILTROS_SESIONES_LECTURA.TODAS
 let rankingCosechadoresActual = []
+let produccionDiariaActual = []
+let produccionDiariaCampaniaActual = ''
 
 const tecladosManuales = new Map(
   [
@@ -1102,6 +1121,120 @@ function ocultarFeedbackRanking() {
   rankingFeedback.className = 'resultado ranking-feedback oculto'
 }
 
+async function abrirProduccionDiaria() {
+  mostrarVista(vistaProduccionDiaria)
+
+  if (produccionDiariaActual.length > 0) {
+    produccionCampania.textContent = produccionDiariaCampaniaActual || 'Campaña activa'
+    renderProduccionDiaria()
+  } else {
+    produccionCampania.textContent = 'Campaña activa'
+    produccionResumen.classList.add('oculto')
+    produccionTablaBody.replaceChildren()
+    produccionEmpty.classList.add('oculto')
+  }
+
+  await cargarProduccionDiaria()
+}
+
+async function cargarProduccionDiaria() {
+  btnActualizarProduccion.disabled = true
+  btnReintentarProduccion.classList.add('oculto')
+  mostrarFeedbackProduccion('Cargando producción…')
+
+  if (!navigator.onLine) {
+    mostrarFeedbackProduccion(
+      'No se puede actualizar la producción sin conexión.',
+      'error',
+      true
+    )
+    btnActualizarProduccion.disabled = false
+    return
+  }
+
+  try {
+    const respuesta = await obtenerProduccionDiaria(
+      operador.dni,
+      (nombre, parametros) => supabase.rpc(nombre, parametros)
+    )
+    produccionDiariaActual = reemplazarProduccionDiaria(
+      produccionDiariaActual,
+      respuesta.produccion
+    )
+    produccionDiariaCampaniaActual = respuesta.campania.nombre || 'Campaña activa'
+    produccionCampania.textContent = produccionDiariaCampaniaActual
+    ocultarFeedbackProduccion()
+    renderProduccionDiaria()
+  } catch (error) {
+    const mensaje = esErrorConexionProduccion(error)
+      ? 'No se puede actualizar la producción sin conexión.'
+      : `No se pudo cargar la producción: ${error.message}`
+    mostrarFeedbackProduccion(mensaje, 'error', true)
+
+    if (produccionDiariaActual.length === 0) {
+      produccionResumen.classList.add('oculto')
+      produccionTablaBody.replaceChildren()
+      produccionEmpty.classList.add('oculto')
+    }
+  } finally {
+    btnActualizarProduccion.disabled = false
+  }
+}
+
+function renderProduccionDiaria() {
+  const resumen = resumirProduccionDiaria(produccionDiariaActual)
+  produccionResumen.textContent = `${formatearNumero(resumen.jabas)} ${
+    resumen.jabas === 1 ? 'jaba' : 'jabas'
+  } · ${formatearNumero(resumen.dias)} ${
+    resumen.dias === 1 ? 'día con producción' : 'días con producción'
+  }`
+  produccionResumen.classList.remove('oculto')
+  produccionTablaBody.replaceChildren()
+
+  for (const fila of produccionDiariaActual) {
+    const tr = document.createElement('tr')
+
+    const fecha = document.createElement('td')
+    fecha.className = 'produccion-table__date'
+    const fechaPrincipal = document.createElement('strong')
+    fechaPrincipal.textContent = formatearFechaCalendario(fila.fecha)
+    const sesiones = document.createElement('span')
+    sesiones.textContent = `${formatearNumero(fila.total_sesiones)} ${
+      fila.total_sesiones === 1 ? 'sesión' : 'sesiones'
+    }`
+    fecha.append(fechaPrincipal, sesiones)
+
+    const jabas = document.createElement('td')
+    jabas.className = 'industrial-table__numeric produccion-table__metric'
+    const totalJabas = document.createElement('strong')
+    totalJabas.textContent = formatearNumero(fila.total_jabas)
+    jabas.append(totalJabas)
+
+    const cosechadores = document.createElement('td')
+    cosechadores.className = 'industrial-table__numeric produccion-table__metric'
+    const totalCosechadores = document.createElement('strong')
+    totalCosechadores.textContent = formatearNumero(fila.total_cosechadores)
+    cosechadores.append(totalCosechadores)
+
+    tr.append(fecha, jabas, cosechadores)
+    produccionTablaBody.append(tr)
+  }
+
+  produccionEmpty.classList.toggle('oculto', produccionDiariaActual.length > 0)
+}
+
+function mostrarFeedbackProduccion(mensaje, tipo = '', permitirReintento = false) {
+  produccionFeedback.textContent = mensaje
+  produccionFeedback.className = `resultado ranking-feedback${tipo ? ` ${tipo}` : ''}`
+  btnReintentarProduccion.classList.toggle('oculto', !permitirReintento)
+}
+
+function ocultarFeedbackProduccion() {
+  produccionFeedback.textContent = ''
+  produccionFeedback.className = 'resultado ranking-feedback oculto'
+  btnReintentarProduccion.classList.add('oculto')
+}
+
 function formatearNumero(valor) {
   return Number(valor || 0).toLocaleString('es-PE')
 }
@@ -1115,6 +1248,8 @@ consultaBusqueda.addEventListener('input', () => {
 
 rankingBusqueda.addEventListener('input', renderRankingCosechadores)
 btnActualizarRanking.addEventListener('click', cargarRankingCosechadores)
+btnActualizarProduccion.addEventListener('click', cargarProduccionDiaria)
+btnReintentarProduccion.addEventListener('click', cargarProduccionDiaria)
 
 window.addEventListener('online', async () => {
   console.log('Conexión recuperada')
@@ -1201,6 +1336,8 @@ btnMenuReportes.addEventListener('click', () => {
 btnVolverReportes.addEventListener('click', mostrarMenu)
 btnReporteRanking.addEventListener('click', abrirRankingCosechadores)
 btnVolverRanking.addEventListener('click', () => mostrarVista(vistaReportes))
+btnReporteProduccion.addEventListener('click', abrirProduccionDiaria)
+btnVolverProduccion.addEventListener('click', () => mostrarVista(vistaReportes))
 
 estadoConexion.addEventListener('click', mostrarEstadoSync)
 document.querySelector('#btn-volver-sync').addEventListener('click', mostrarMenu)
@@ -1484,6 +1621,7 @@ function mostrarVista(vista) {
   vistaConsulta.classList.add('oculto')
   vistaReportes.classList.add('oculto')
   vistaRankingCosechadores.classList.add('oculto')
+  vistaProduccionDiaria.classList.add('oculto')
   vista.classList.remove('oculto')
 }
 
