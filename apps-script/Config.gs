@@ -1,6 +1,7 @@
 var SCC_CONFIG = Object.freeze({
   hojaTrabajadores: 'TRABAJADORES',
   hojaCampanias: 'CAMPANIAS',
+  hojaVariedades: 'VARIEDADES',
   filaEncabezado: 1,
   columnas: Object.freeze({
     dni: 1,
@@ -22,6 +23,14 @@ var SCC_CONFIG = Object.freeze({
     observacion: 7,
     idSistema: 8,
     ultimaSincronizacion: 9
+  }),
+  columnasVariedades: Object.freeze({
+    nombre: 1,
+    activo: 2,
+    estadoSync: 3,
+    observacion: 4,
+    idSistema: 5,
+    ultimaSincronizacion: 6
   }),
   estados: Object.freeze({
     pendiente: 'PENDIENTE',
@@ -53,6 +62,15 @@ var SCC_ENCABEZADOS_CAMPANIAS = [
   'Fecha inicio',
   'Fecha fin',
   'Estado',
+  'Estado Sync',
+  'Observación',
+  'ID Sistema',
+  'Última sincronización'
+];
+
+var SCC_ENCABEZADOS_VARIEDADES = [
+  'Nombre',
+  'Activo',
   'Estado Sync',
   'Observación',
   'ID Sistema',

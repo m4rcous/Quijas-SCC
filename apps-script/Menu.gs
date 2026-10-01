@@ -10,12 +10,15 @@ function menuSincronizarDatos() {
   var ui = SpreadsheetApp.getUi();
   var trabajadores = ejecutarSincronizacionMaestroScc_(sincronizarTrabajadores_);
   var campanias = ejecutarSincronizacionMaestroScc_(sincronizarCampanias_);
+  var variedades = ejecutarSincronizacionMaestroScc_(sincronizarVariedades_);
 
   ui.alert(
     'Sincronización terminada\n\n' +
     formatearResumenSincronizacionScc_('Trabajadores', trabajadores) +
     '\n\n' +
-    formatearResumenSincronizacionScc_('Campañas', campanias)
+    formatearResumenSincronizacionScc_('Campañas', campanias) +
+    '\n\n' +
+    formatearResumenSincronizacionScc_('Variedades', variedades)
   );
 }
 
@@ -30,9 +33,11 @@ function menuActualizarDesdeSistema() {
       total = actualizarTrabajadoresDesdeSistema_();
     } else if (nombre === SCC_CONFIG.hojaCampanias) {
       total = actualizarCampaniasDesdeSistema_();
+    } else if (nombre === SCC_CONFIG.hojaVariedades) {
+      total = actualizarVariedadesDesdeSistema_();
     } else {
       throw new Error(
-        'Selecciona la hoja TRABAJADORES o CAMPANIAS antes de actualizar desde el sistema.'
+        'Selecciona la hoja TRABAJADORES, CAMPANIAS o VARIEDADES antes de actualizar desde el sistema.'
       );
     }
 

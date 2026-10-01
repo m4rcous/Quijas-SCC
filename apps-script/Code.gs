@@ -10,9 +10,15 @@ function onOpen() {
   } catch (error) {
     Logger.log('No se pudo configurar CAMPANIAS al abrir: %s', error.message);
   }
+  try {
+    configurarHojaVariedades_();
+  } catch (error) {
+    Logger.log('No se pudo configurar VARIEDADES al abrir: %s', error.message);
+  }
 }
 
 function onEdit(e) {
   marcarEdicionTrabajadores_(e);
   marcarEdicionCampanias_(e);
+  marcarEdicionVariedades_(e);
 }

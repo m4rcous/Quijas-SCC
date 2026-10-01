@@ -1,6 +1,6 @@
 # Sincronización SCC con Google Sheets
 
-PostgreSQL en Supabase es la fuente oficial. Google Sheets funciona como interfaz administrativa para los maestros TRABAJADORES y CAMPANIAS.
+PostgreSQL en Supabase es la fuente oficial. Google Sheets funciona como interfaz administrativa para los maestros TRABAJADORES, CAMPANIAS y VARIEDADES.
 
 Flujo: Administración → Google Sheets → Apps Script → Supabase Auth → RPC administrativa → PostgreSQL.
 
@@ -93,6 +93,41 @@ public.admin_listar_campanias() devuelve las campañas ordenadas por fecha_inici
 
 Ambas RPC llaman primero a public.autorizar_integracion_gestion_maestros(). Se revoca EXECUTE de PUBLIC y anon, y solo se concede a authenticated. No se concede SELECT directo sobre public.campanias.
 
+## VARIEDADES
+
+El esquema real confirmado de public.variedades es:
+
+- id uuid PRIMARY KEY DEFAULT gen_random_uuid();
+- nombre varchar NOT NULL UNIQUE;
+- activo boolean NOT NULL DEFAULT true;
+- created_at timestamptz NOT NULL DEFAULT now();
+- updated_at timestamptz NULL;
+- trigger trg_variedades_updated_at antes de UPDATE, que ejecuta actualizar_updated_at();
+- RLS habilitado, no forzado y sin policies.
+
+La hoja VARIEDADES usa:
+
+| Columna | Campo | Uso |
+| --- | --- | --- |
+| A | Nombre | Editable |
+| B | Activo | Editable; dropdown S?/No |
+| C | Estado Sync | T?cnica |
+| D | Observaci?n | T?cnica |
+| E | ID Sistema | T?cnica |
+| F | ?ltima sincronizaci?n | T?cnica |
+
+C:F quedan protegidas. Editar A:B marca C = PENDIENTE, limpia D y conserva E:F. onEdit no llama a Supabase.
+
+public.admin_guardar_variedad recibe p_variedad_id uuid, p_nombre varchar y p_activo boolean. Si hay ID, busca y actualiza exactamente ese UUID. Si no hay ID, usa nombre como fallback ?nicamente porque UNIQUE(nombre) est? confirmado; si existe actualiza y, si no existe, crea. No se a?ade comparaci?n case-insensitive. Los conflictos se traducen a ?Ya existe otra variedad con ese nombre?.
+
+public.admin_listar_variedades() incluye activas e inactivas y ordena por nombre ASC. Ambas RPC reutilizan public.autorizar_integracion_gestion_maestros(), se exponen solo a authenticated y no conceden SELECT directo sobre public.variedades.
+
+No se implementa DELETE. Para retirar una variedad se usa activo = false.
+
+### Relaci?n con LOTES
+
+public.lotes.variedad_id referencia public.variedades.id. LOTES todav?a no se modifica. En esa fase, la hoja podr? mostrar el nombre mediante una selecci?n controlada, pero Apps Script/backend deber? resolver y persistir el UUID real en variedad_id; no se debe usar un nombre libre como identidad.
+
 ## Sincronizar datos
 
 SCC → Sincronizar datos procesa primero TRABAJADORES y después CAMPANIAS.
@@ -112,7 +147,7 @@ Si la hoja contiene cualquier fila PENDIENTE o ERROR, la actualización se abort
 
 ## Archivos de Apps Script
 
-Copiar al proyecto: Code.gs, Config.gs, Menu.gs, Supabase.gs, Trabajadores.gs, TrabajadoresPure.gs, Campanias.gs y CampaniasPure.gs.
+Copiar al proyecto: Code.gs, Config.gs, Menu.gs, Supabase.gs, Trabajadores.gs, TrabajadoresPure.gs, Campanias.gs, CampaniasPure.gs, Variedades.gs y VariedadesPure.gs.
 
 Al abrir el Spreadsheet, onOpen crea el menú SCC y configura las hojas administrativas soportadas.
 
@@ -121,3 +156,7 @@ Al abrir el Spreadsheet, onOpen crea el menú SCC y configura las hojas administ
 20260930_admin_campanias.sql reutiliza public.integraciones_api y public.autorizar_integracion_gestion_maestros(); no los recrea.
 
 Antes de aplicar la migración en un entorno real, debe haber como máximo una fila con estado ACTIVA. Si existen varias, la migración se detendrá y Administración deberá decidir manualmente cuáles cerrar antes de volver a ejecutarla.
+
+## Migraci?n administrativa de VARIEDADES
+
+20260930_admin_variedades.sql reutiliza public.integraciones_api y public.autorizar_integracion_gestion_maestros(); no los recrea. Crea admin_guardar_variedad(uuid, varchar, boolean), admin_listar_variedades(), revoca acceso a PUBLIC/anon, concede EXECUTE solo a authenticated y solicita recarga del schema de PostgREST.
