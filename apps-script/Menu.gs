@@ -11,6 +11,7 @@ function menuSincronizarDatos() {
   var trabajadores = ejecutarSincronizacionMaestroScc_(sincronizarTrabajadores_);
   var campanias = ejecutarSincronizacionMaestroScc_(sincronizarCampanias_);
   var variedades = ejecutarSincronizacionMaestroScc_(sincronizarVariedades_);
+  var lotes = ejecutarSincronizacionMaestroScc_(sincronizarLotes_);
 
   ui.alert(
     'Sincronización terminada\n\n' +
@@ -18,7 +19,9 @@ function menuSincronizarDatos() {
     '\n\n' +
     formatearResumenSincronizacionScc_('Campañas', campanias) +
     '\n\n' +
-    formatearResumenSincronizacionScc_('Variedades', variedades)
+    formatearResumenSincronizacionScc_('Variedades', variedades) +
+    '\n\n' +
+    formatearResumenSincronizacionScc_('Lotes', lotes)
   );
 }
 
@@ -35,10 +38,16 @@ function menuActualizarDesdeSistema() {
       total = actualizarCampaniasDesdeSistema_();
     } else if (nombre === SCC_CONFIG.hojaVariedades) {
       total = actualizarVariedadesDesdeSistema_();
+    } else if (nombre === SCC_CONFIG.hojaLotes) {
+      total = actualizarLotesDesdeSistema_();
     } else {
       throw new Error(
-        'Selecciona la hoja TRABAJADORES, CAMPANIAS o VARIEDADES antes de actualizar desde el sistema.'
+        'Selecciona la hoja TRABAJADORES, CAMPANIAS, VARIEDADES o LOTES antes de actualizar desde el sistema.'
       );
+    }
+
+    if (nombre === SCC_CONFIG.hojaCampanias || nombre === SCC_CONFIG.hojaVariedades) {
+      refrescarValidacionesLotes_();
     }
 
     ui.alert(nombre + ' actualizado desde el sistema. Registros: ' + total + '.');

@@ -15,10 +15,16 @@ function onOpen() {
   } catch (error) {
     Logger.log('No se pudo configurar VARIEDADES al abrir: %s', error.message);
   }
+  try {
+    configurarHojaLotes_();
+  } catch (error) {
+    Logger.log('No se pudo configurar LOTES al abrir: %s', error.message);
+  }
 }
 
 function onEdit(e) {
   marcarEdicionTrabajadores_(e);
   marcarEdicionCampanias_(e);
   marcarEdicionVariedades_(e);
+  marcarEdicionLotes_(e);
 }

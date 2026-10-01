@@ -1,162 +1,137 @@
 # Sincronización SCC con Google Sheets
 
-PostgreSQL en Supabase es la fuente oficial. Google Sheets funciona como interfaz administrativa para los maestros TRABAJADORES, CAMPANIAS y VARIEDADES.
+PostgreSQL en Supabase es la fuente oficial. Google Sheets funciona como interfaz administrativa para los maestros TRABAJADORES, CAMPANIAS, VARIEDADES y LOTES.
 
 Flujo: Administración → Google Sheets → Apps Script → Supabase Auth → RPC administrativa → PostgreSQL.
 
 ## Seguridad
 
-Ambos maestros reutilizan la misma identidad técnica y el mismo control administrativo existente:
+Los cuatro maestros reutilizan la misma identidad técnica y el mismo control administrativo existente:
 
 - cuenta dedicada de Supabase Auth;
-- auth.uid();
-- public.integraciones_api;
-- activo = true;
-- puede_gestionar_maestros = true;
-- public.autorizar_integracion_gestion_maestros().
+- `auth.uid()`;
+- `public.integraciones_api`;
+- `activo = true`;
+- `puede_gestionar_maestros = true`;
+- `public.autorizar_integracion_gestion_maestros()`.
 
-No se usa service_role, no se crean credenciales nuevas y las RPC administrativas no se conceden a anon. La integración conserva las mismas cuatro Script Properties: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_INTEGRATION_EMAIL y SUPABASE_INTEGRATION_PASSWORD.
+No se usa `service_role`, no se crean credenciales nuevas y las RPC administrativas no se conceden a `anon`. La integración conserva las mismas cuatro Script Properties: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_INTEGRATION_EMAIL` y `SUPABASE_INTEGRATION_PASSWORD`.
 
 ## TRABAJADORES
 
-La hoja conserva el flujo ya probado:
-
-| Columna | Campo | Uso |
-| --- | --- | --- |
-| A | DNI | Editable |
-| B | Nombres | Editable |
-| C | Apellidos | Editable |
-| D | Activo | Editable |
-| E | Estado Sync | Técnica |
-| F | Observación | Técnica |
-| G | ID Sistema | Técnica |
-| H | Última sincronización | Técnica |
-
-Editar A:D marca la fila como PENDIENTE, limpia la observación y conserva el ID y la última sincronización.
+La hoja conserva el flujo ya probado: A:D son editables y E:H son columnas técnicas. Editar A:D marca la fila como PENDIENTE, limpia la observación y conserva ID Sistema y Última sincronización.
 
 ## CAMPANIAS
 
-El esquema confirmado de public.campanias es:
+La hoja CAMPANIAS usa Código, Nombre, Fecha inicio, Fecha fin y Estado como campos editables. Estado usa ACTIVA/CERRADA. Las columnas técnicas son F:I. Editar A:E marca la fila PENDIENTE sin llamar Supabase desde `onEdit`.
 
-- id uuid PRIMARY KEY DEFAULT gen_random_uuid();
-- codigo varchar NOT NULL UNIQUE;
-- nombre varchar NOT NULL;
-- fecha_inicio date NOT NULL;
-- fecha_fin date NULL;
-- estado public.estado_campania NOT NULL DEFAULT ACTIVA;
-- created_at timestamptz NOT NULL DEFAULT now();
-- updated_at timestamptz NULL;
-- CHECK de fecha_fin NULL o mayor/igual a fecha_inicio;
-- trigger trg_campanias_updated_at antes de UPDATE.
+`admin_guardar_campania` mantiene el UUID cuando existe ID Sistema y usa `codigo` como fallback únicamente porque `public.campanias.codigo` es UNIQUE. `admin_listar_campanias()` devuelve el maestro para reconstrucción de la hoja.
 
-El enum public.estado_campania contiene únicamente ACTIVA y CERRADA.
+## VARIEDADES
 
-La migración supabase/migrations/20260930_admin_campanias.sql añade una regla explícita: como máximo una campaña puede estar ACTIVA. Se implementa mediante un índice UNIQUE parcial. Antes de crearlo, la migración cuenta las campañas activas existentes y aborta con un mensaje claro si hay más de una. No cierra campañas automáticamente.
+La hoja VARIEDADES usa Nombre y Activo como campos editables y C:F como columnas técnicas. Activo usa Sí/No. Editar A:B marca la fila PENDIENTE y conserva su UUID.
 
-La hoja CAMPANIAS usa:
+`admin_guardar_variedad` mantiene el UUID cuando existe ID Sistema y usa `nombre` como fallback únicamente porque `public.variedades.nombre` es UNIQUE. No se implementa DELETE; una variedad se retira con `activo = false`.
+
+## LOTES
+
+El esquema confirmado de `public.lotes` usa UUID como identidad persistente y tiene la restricción real `UNIQUE (campania_id, codigo)`. Por tanto, `codigo` no es una identidad global. Cuando no existe ID Sistema, la identidad natural de fallback es exactamente `(campania_id, codigo)`.
+
+La hoja LOTES usa:
 
 | Columna | Campo | Uso |
 | --- | --- | --- |
 | A | Código | Editable |
-| B | Nombre | Editable |
-| C | Fecha inicio | Editable |
-| D | Fecha fin | Editable |
-| E | Estado | Editable; dropdown ACTIVA/CERRADA |
+| B | Nombre | Editable; vacío se persiste como NULL |
+| C | Campaña | Editable; muestra `campanias.codigo` |
+| D | Variedad | Editable; muestra `variedades.nombre` |
+| E | Activo | Editable; dropdown Sí/No |
 | F | Estado Sync | Técnica |
 | G | Observación | Técnica |
 | H | ID Sistema | Técnica |
 | I | Última sincronización | Técnica |
 
-Las columnas C:D se muestran como dd/MM/yyyy; F:I quedan protegidas. Editar A:E marca F = PENDIENTE, limpia G y conserva H:I. onEdit no llama a Supabase.
+F:I quedan protegidas. Editar A:E marca F = PENDIENTE, limpia G y conserva H:I. `onEdit` no llama a Supabase.
 
-## Fechas de campañas
+### Referencias visibles y UUID
 
-fecha_inicio y fecha_fin son DATE, por lo que no se serializan con UTC.
+La campaña visible se resuelve así: `CAMPANIAS.codigo → CAMPANIAS.ID Sistema → campania_id`.
 
-Al enviar una fecha de Google Sheets se usa SpreadsheetApp.getActive().getSpreadsheetTimeZone() y Utilities.formatDate(fecha, zonaHoraria, 'yyyy-MM-dd').
+La variedad visible se resuelve así: `VARIEDADES.nombre → VARIEDADES.ID Sistema → variedad_id`.
 
-No se usa toISOString().slice(0, 10).
+La fila referenciada debe estar SINCRONIZADA y tener un UUID válido. PostgreSQL persiste los UUID; los textos visibles no son identidad final.
 
-Al reconstruir una campaña desde PostgreSQL, el texto YYYY-MM-DD se conserva como fecha calendario y se convierte con Utilities.parseDate(texto, zonaHoraria, 'yyyy-MM-dd') usando la timezone del Spreadsheet. Luego la hoja aplica el formato visual dd/MM/yyyy. Así se evita desplazar el día por un parseo UTC intermedio.
+### Campañas y variedades activas
 
-## RPC de campañas
+Para crear un lote o cambiar su `campania_id`, la campaña destino debe estar ACTIVA. Para crear un lote o cambiar su `variedad_id`, la variedad destino debe estar activa.
 
-public.admin_guardar_campania recibe p_campania_id uuid, p_codigo varchar, p_nombre varchar, p_fecha_inicio date, p_fecha_fin date y p_estado public.estado_campania.
+Un lote histórico puede conservar una campaña que posteriormente quedó CERRADA y una variedad que posteriormente quedó inactiva. Si esos UUID no cambian, se permite editar los demás campos del lote. La validación se aplica a nuevas asignaciones, no a la mera conservación del histórico.
 
-Si p_campania_id tiene valor, busca exactamente por id; si no existe, devuelve “La campaña indicada no existe”. Esto permite cambiar el código sin perder identidad.
+`admin_listar_lotes()` incluye lotes activos e inactivos, y también relaciones históricas con campañas cerradas o variedades inactivas.
 
-Si no hay ID, usa codigo como fallback porque UNIQUE(codigo) está confirmado. Si el código existe, actualiza esa campaña; si no existe, crea una nueva. Siempre devuelve el UUID real.
+### Dropdowns de LOTES
 
-La RPC valida campos obligatorios, fechas y estado. Los conflictos con la regla de una sola campaña activa se convierten en “Ya existe otra campaña activa”.
+El dropdown de Campaña se construye a partir de CAMPANIAS sincronizadas y ACTIVA. El dropdown de Variedad se construye a partir de VARIEDADES sincronizadas y activas. Estas listas se releen desde los maestros; no se mantienen catálogos duplicados.
 
-public.admin_listar_campanias() devuelve las campañas ordenadas por fecha_inicio DESC, codigo ASC.
+Las validaciones de Campaña y Variedad permiten conservar visualmente un valor histórico cargado desde PostgreSQL aunque ya no aparezca entre las opciones operativas. Esto evita borrar una relación histórica al reconstruir la hoja.
 
-Ambas RPC llaman primero a public.autorizar_integracion_gestion_maestros(). Se revoca EXECUTE de PUBLIC y anon, y solo se concede a authenticated. No se concede SELECT directo sobre public.campanias.
+### Cambios de claves visibles
 
-## VARIEDADES
+Si se cambia `campanias.codigo` o `variedades.nombre`, las FK de `public.lotes` siguen apuntando a los mismos UUID. LOTES puede mostrar temporalmente el texto anterior hasta ejecutar `SCC → Actualizar desde sistema`. No se implementan cascadas visuales en `onEdit`.
 
-El esquema real confirmado de public.variedades es:
+### Borrado
 
-- id uuid PRIMARY KEY DEFAULT gen_random_uuid();
-- nombre varchar NOT NULL UNIQUE;
-- activo boolean NOT NULL DEFAULT true;
-- created_at timestamptz NOT NULL DEFAULT now();
-- updated_at timestamptz NULL;
-- trigger trg_variedades_updated_at antes de UPDATE, que ejecuta actualizar_updated_at();
-- RLS habilitado, no forzado y sin policies.
-
-La hoja VARIEDADES usa:
-
-| Columna | Campo | Uso |
-| --- | --- | --- |
-| A | Nombre | Editable |
-| B | Activo | Editable; dropdown S?/No |
-| C | Estado Sync | T?cnica |
-| D | Observaci?n | T?cnica |
-| E | ID Sistema | T?cnica |
-| F | ?ltima sincronizaci?n | T?cnica |
-
-C:F quedan protegidas. Editar A:B marca C = PENDIENTE, limpia D y conserva E:F. onEdit no llama a Supabase.
-
-public.admin_guardar_variedad recibe p_variedad_id uuid, p_nombre varchar y p_activo boolean. Si hay ID, busca y actualiza exactamente ese UUID. Si no hay ID, usa nombre como fallback ?nicamente porque UNIQUE(nombre) est? confirmado; si existe actualiza y, si no existe, crea. No se a?ade comparaci?n case-insensitive. Los conflictos se traducen a ?Ya existe otra variedad con ese nombre?.
-
-public.admin_listar_variedades() incluye activas e inactivas y ordena por nombre ASC. Ambas RPC reutilizan public.autorizar_integracion_gestion_maestros(), se exponen solo a authenticated y no conceden SELECT directo sobre public.variedades.
-
-No se implementa DELETE. Para retirar una variedad se usa activo = false.
-
-### Relaci?n con LOTES
-
-public.lotes.variedad_id referencia public.variedades.id. LOTES todav?a no se modifica. En esa fase, la hoja podr? mostrar el nombre mediante una selecci?n controlada, pero Apps Script/backend deber? resolver y persistir el UUID real en variedad_id; no se debe usar un nombre libre como identidad.
+No se implementa DELETE para LOTES. Para retirar un lote se usa Activo = No, preservando su histórico.
 
 ## Sincronizar datos
 
-SCC → Sincronizar datos procesa primero TRABAJADORES y después CAMPANIAS.
+`SCC → Sincronizar datos` procesa en este orden:
 
-Cada maestro procesa únicamente filas PENDIENTE. Los errores quedan aislados por fila y un error general de una hoja no impide intentar sincronizar la otra. Al finalizar se muestra un resumen por maestro con cantidad sincronizada y errores.
+1. TRABAJADORES
+2. CAMPANIAS
+3. VARIEDADES
+4. LOTES
+
+Cada maestro procesa únicamente filas PENDIENTE y aísla los errores por fila. Un error de una fila no detiene las siguientes; un error general de un maestro no impide intentar los demás.
+
+LOTES se ejecuta al final. En ese momento Apps Script vuelve a leer CAMPANIAS y VARIEDADES, de modo que una campaña o variedad sincronizada durante esa misma ejecución puede usarse inmediatamente en una fila LOTES.
+
+Antes de procesar LOTES se obtiene una instantánea con `admin_listar_lotes()`. Esa instantánea permite distinguir una relación histórica sin cambios de una nueva asignación y aplicar correctamente las reglas ACTIVA/activo.
 
 ## Actualizar desde sistema
 
-SCC → Actualizar desde sistema trabaja sobre la hoja actualmente activa:
+`SCC → Actualizar desde sistema` trabaja sobre la hoja activa:
 
-- TRABAJADORES → admin_listar_trabajadores();
-- CAMPANIAS → admin_listar_campanias().
+- TRABAJADORES → `admin_listar_trabajadores()`;
+- CAMPANIAS → `admin_listar_campanias()`;
+- VARIEDADES → `admin_listar_variedades()`;
+- LOTES → `admin_listar_lotes()`.
 
-Si la hoja contiene cualquier fila PENDIENTE o ERROR, la actualización se aborta antes de sobrescribir datos con el mensaje:
+Si la hoja activa contiene cualquier fila PENDIENTE o ERROR, se aborta antes de reconstruir para no sobrescribir cambios locales.
 
-“Hay cambios locales pendientes o con error. Sincronízalos o resuélvelos antes de actualizar desde el sistema.”
+Al reconstruir LOTES se escribe Código, Nombre, código visible de campaña, nombre visible de variedad, Sí/No, SINCRONIZADO, observación vacía, UUID real y timestamp actual. Después se recalculan los dropdowns.
+
+## RPC de LOTES
+
+`public.admin_guardar_lote(uuid, varchar, varchar, uuid, uuid, boolean)`:
+
+- con `p_lote_id`, busca y actualiza exactamente ese UUID; si no existe devuelve `El lote indicado no existe`;
+- sin `p_lote_id`, busca únicamente por `(p_campania_id, codigo)`; si existe actualiza y si no existe crea;
+- nunca busca un lote únicamente por `codigo`;
+- normaliza Código con `btrim`, Nombre vacío a NULL y valida los límites de 30/100 caracteres;
+- traduce el conflicto de `UNIQUE(campania_id, codigo)` a `Ya existe otro lote con ese código en la campaña seleccionada`;
+- devuelve siempre el UUID real y las referencias visibles resultantes.
+
+`public.admin_listar_lotes()` hace join con CAMPANIAS y VARIEDADES, incluye históricos/inactivos y ordena por `campania_codigo ASC, codigo ASC`.
+
+Ambas RPC llaman primero a `public.autorizar_integracion_gestion_maestros()`, revocan ejecución de PUBLIC/anon y conceden EXECUTE únicamente a authenticated. No se concede SELECT directo sobre `public.lotes`.
 
 ## Archivos de Apps Script
 
-Copiar al proyecto: Code.gs, Config.gs, Menu.gs, Supabase.gs, Trabajadores.gs, TrabajadoresPure.gs, Campanias.gs, CampaniasPure.gs, Variedades.gs y VariedadesPure.gs.
+El proyecto administrativo usa `Code.gs`, `Config.gs`, `Menu.gs`, `Supabase.gs`, `Trabajadores.gs`, `TrabajadoresPure.gs`, `Campanias.gs`, `CampaniasPure.gs`, `Variedades.gs`, `VariedadesPure.gs`, `Lotes.gs` y `LotesPure.gs`.
 
-Al abrir el Spreadsheet, onOpen crea el menú SCC y configura las hojas administrativas soportadas.
+Al abrir el Spreadsheet, `onOpen` crea el menú SCC y configura las cuatro hojas administrativas.
 
-## Migraciones y riesgo de datos existentes
+## Migraciones
 
-20260930_admin_campanias.sql reutiliza public.integraciones_api y public.autorizar_integracion_gestion_maestros(); no los recrea.
-
-Antes de aplicar la migración en un entorno real, debe haber como máximo una fila con estado ACTIVA. Si existen varias, la migración se detendrá y Administración deberá decidir manualmente cuáles cerrar antes de volver a ejecutarla.
-
-## Migraci?n administrativa de VARIEDADES
-
-20260930_admin_variedades.sql reutiliza public.integraciones_api y public.autorizar_integracion_gestion_maestros(); no los recrea. Crea admin_guardar_variedad(uuid, varchar, boolean), admin_listar_variedades(), revoca acceso a PUBLIC/anon, concede EXECUTE solo a authenticated y solicita recarga del schema de PostgREST.
+`20260930_admin_lotes.sql` reutiliza `public.integraciones_api` y `public.autorizar_integracion_gestion_maestros()`; no los recrea. La migración solo crea las RPC administrativas de LOTES, configura sus permisos y solicita la recarga del schema de PostgREST.
