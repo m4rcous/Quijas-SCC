@@ -1,96 +1,123 @@
 # Sincronización SCC con Google Sheets
 
-La fuente de verdad es PostgreSQL en Supabase. La hoja `TRABAJADORES` sirve como interfaz administrativa y se comunica así:
+PostgreSQL en Supabase es la fuente oficial. Google Sheets funciona como interfaz administrativa para los maestros TRABAJADORES y CAMPANIAS.
 
-`Administración → Google Sheets → Apps Script → Supabase Auth → RPC administrativa → PostgreSQL`
+Flujo: Administración → Google Sheets → Apps Script → Supabase Auth → RPC administrativa → PostgreSQL.
 
-Apps Script usa una cuenta dedicada de Supabase Auth para la integración SCC ↔ Google Sheets. No debe usarse una cuenta personal, el DNI de un operador ni una `service_role` key.
+## Seguridad
 
-## Autorización
+Ambos maestros reutilizan la misma identidad técnica y el mismo control administrativo existente:
 
-La migración `supabase/migrations/20260930_admin_trabajadores.sql` crea `public.integraciones_api`. Cada identidad autorizada se identifica por `auth_user_id`, que referencia `auth.users(id)`, y solo puede administrar maestros cuando `activo = true` y `puede_gestionar_maestros = true`.
+- cuenta dedicada de Supabase Auth;
+- auth.uid();
+- public.integraciones_api;
+- activo = true;
+- puede_gestionar_maestros = true;
+- public.autorizar_integracion_gestion_maestros().
 
-Las RPC `admin_guardar_trabajador` y `admin_listar_trabajadores` solo conceden `EXECUTE` a `authenticated`. Además, ambas llaman a `autorizar_integracion_gestion_maestros()`, que obtiene `auth.uid()` del JWT y comprueba la autorización en `integraciones_api`. La tabla tiene RLS habilitado y no concede acceso directo a `anon` ni `authenticated`.
+No se usa service_role, no se crean credenciales nuevas y las RPC administrativas no se conceden a anon. La integración conserva las mismas cuatro Script Properties: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_INTEGRATION_EMAIL y SUPABASE_INTEGRATION_PASSWORD.
 
-## Preparación manual en Supabase
+## TRABAJADORES
 
-1. Aplicar la migración por el flujo habitual del proyecto. No crea usuarios Auth.
-2. En **Supabase Dashboard → Authentication → Users**, crear una cuenta dedicada, por ejemplo `scc-sheets@<dominio-controlado>`, con una contraseña aleatoria fuerte.
-3. Copiar el UUID de ese usuario (`auth.users.id`).
-4. Registrar la integración desde un contexto administrativo seguro de SQL:
-
-```sql
-insert into public.integraciones_api (
-  auth_user_id,
-  nombre,
-  puede_gestionar_maestros,
-  activo
-) values (
-  '<UUID_AUTH>',
-  'Google Sheets SCC',
-  true,
-  true
-);
-```
-
-No insertar usuarios manualmente en `auth.users`.
-
-## Script Properties
-
-En **Apps Script → Project Settings → Script Properties** configurar:
-
-- `SUPABASE_URL`: URL del proyecto Supabase.
-- `SUPABASE_PUBLISHABLE_KEY`: publishable/anon-compatible key pública del proyecto.
-- `SUPABASE_INTEGRATION_EMAIL`: email de la cuenta dedicada.
-- `SUPABASE_INTEGRATION_PASSWORD`: contraseña de la cuenta dedicada.
-
-El email y la contraseña son credenciales privadas. No deben escribirse en celdas, logs ni código. El script obtiene un `access_token` mediante Supabase Auth y lo reutiliza temporalmente con `CacheService`; si una RPC responde `401`, elimina el token y se autentica una vez más.
-
-## Instalación de Apps Script
-
-1. Crear o abrir el Google Sheet administrativo.
-2. Abrir **Extensiones → Apps Script**.
-3. Copiar los archivos de `apps-script/`: `Code.gs`, `Config.gs`, `Menu.gs`, `Supabase.gs`, `Trabajadores.gs` y `TrabajadoresPure.gs`.
-4. Guardar y recargar el Sheet para que `onOpen` cree el menú `SCC` y configure `TRABAJADORES`.
-
-La hoja usa estas columnas:
+La hoja conserva el flujo ya probado:
 
 | Columna | Campo | Uso |
 | --- | --- | --- |
 | A | DNI | Editable |
 | B | Nombres | Editable |
 | C | Apellidos | Editable |
-| D | Activo | Editable; dropdown `Sí`/`No` |
+| D | Activo | Editable |
 | E | Estado Sync | Técnica |
 | F | Observación | Técnica |
-| G | ID Sistema | Técnica; UUID de `trabajadores.id` |
+| G | ID Sistema | Técnica |
 | H | Última sincronización | Técnica |
 
-El script protege E:H como rango técnico. A:D son las columnas de edición administrativa.
+Editar A:D marca la fila como PENDIENTE, limpia la observación y conserva el ID y la última sincronización.
 
-## Estados y edición
+## CAMPANIAS
 
-`PENDIENTE` indica una fila local que debe enviarse. `SINCRONIZADO` indica que Supabase confirmó la fila. `ERROR` conserva una observación entendible para corregirla.
+El esquema confirmado de public.campanias es:
 
-`onEdit(e)` solo actúa en `TRABAJADORES`, desde la fila 2 y cuando la edición toca A:D. Marca `Estado Sync = PENDIENTE` y limpia `Observación`; conserva `ID Sistema` y `Última sincronización`. No realiza llamadas de red.
+- id uuid PRIMARY KEY DEFAULT gen_random_uuid();
+- codigo varchar NOT NULL UNIQUE;
+- nombre varchar NOT NULL;
+- fecha_inicio date NOT NULL;
+- fecha_fin date NULL;
+- estado public.estado_campania NOT NULL DEFAULT ACTIVA;
+- created_at timestamptz NOT NULL DEFAULT now();
+- updated_at timestamptz NULL;
+- CHECK de fecha_fin NULL o mayor/igual a fecha_inicio;
+- trigger trg_campanias_updated_at antes de UPDATE.
+
+El enum public.estado_campania contiene únicamente ACTIVA y CERRADA.
+
+La migración supabase/migrations/20260930_admin_campanias.sql añade una regla explícita: como máximo una campaña puede estar ACTIVA. Se implementa mediante un índice UNIQUE parcial. Antes de crearlo, la migración cuenta las campañas activas existentes y aborta con un mensaje claro si hay más de una. No cierra campañas automáticamente.
+
+La hoja CAMPANIAS usa:
+
+| Columna | Campo | Uso |
+| --- | --- | --- |
+| A | Código | Editable |
+| B | Nombre | Editable |
+| C | Fecha inicio | Editable |
+| D | Fecha fin | Editable |
+| E | Estado | Editable; dropdown ACTIVA/CERRADA |
+| F | Estado Sync | Técnica |
+| G | Observación | Técnica |
+| H | ID Sistema | Técnica |
+| I | Última sincronización | Técnica |
+
+Las columnas C:D se muestran como dd/MM/yyyy; F:I quedan protegidas. Editar A:E marca F = PENDIENTE, limpia G y conserva H:I. onEdit no llama a Supabase.
+
+## Fechas de campañas
+
+fecha_inicio y fecha_fin son DATE, por lo que no se serializan con UTC.
+
+Al enviar una fecha de Google Sheets se usa SpreadsheetApp.getActive().getSpreadsheetTimeZone() y Utilities.formatDate(fecha, zonaHoraria, 'yyyy-MM-dd').
+
+No se usa toISOString().slice(0, 10).
+
+Al reconstruir una campaña desde PostgreSQL, el texto YYYY-MM-DD se conserva como fecha calendario y se convierte con Utilities.parseDate(texto, zonaHoraria, 'yyyy-MM-dd') usando la timezone del Spreadsheet. Luego la hoja aplica el formato visual dd/MM/yyyy. Así se evita desplazar el día por un parseo UTC intermedio.
+
+## RPC de campañas
+
+public.admin_guardar_campania recibe p_campania_id uuid, p_codigo varchar, p_nombre varchar, p_fecha_inicio date, p_fecha_fin date y p_estado public.estado_campania.
+
+Si p_campania_id tiene valor, busca exactamente por id; si no existe, devuelve “La campaña indicada no existe”. Esto permite cambiar el código sin perder identidad.
+
+Si no hay ID, usa codigo como fallback porque UNIQUE(codigo) está confirmado. Si el código existe, actualiza esa campaña; si no existe, crea una nueva. Siempre devuelve el UUID real.
+
+La RPC valida campos obligatorios, fechas y estado. Los conflictos con la regla de una sola campaña activa se convierten en “Ya existe otra campaña activa”.
+
+public.admin_listar_campanias() devuelve las campañas ordenadas por fecha_inicio DESC, codigo ASC.
+
+Ambas RPC llaman primero a public.autorizar_integracion_gestion_maestros(). Se revoca EXECUTE de PUBLIC y anon, y solo se concede a authenticated. No se concede SELECT directo sobre public.campanias.
 
 ## Sincronizar datos
 
-`SCC → Sincronizar datos` procesa únicamente filas `PENDIENTE`. Valida DNI, nombres, apellidos, activo e ID Sistema antes de llamar `admin_guardar_trabajador`.
+SCC → Sincronizar datos procesa primero TRABAJADORES y después CAMPANIAS.
 
-Si `ID Sistema` tiene UUID, la RPC actualiza exactamente ese trabajador y permite corregir su DNI siempre que no pertenezca a otra persona. Si no hay ID, busca por DNI: actualiza el registro existente o crea uno nuevo. En éxito guarda el UUID real, limpia la observación y registra la fecha/hora. Un error marca solo esa fila y no interrumpe las siguientes.
+Cada maestro procesa únicamente filas PENDIENTE. Los errores quedan aislados por fila y un error general de una hoja no impide intentar sincronizar la otra. Al finalizar se muestra un resumen por maestro con cantidad sincronizada y errores.
 
 ## Actualizar desde sistema
 
-`SCC → Actualizar desde sistema` llama `admin_listar_trabajadores()` y reconstruye A:H usando PostgreSQL. Todos los registros quedan `SINCRONIZADO`, con su UUID real en `ID Sistema` y una nueva fecha/hora de sincronización.
+SCC → Actualizar desde sistema trabaja sobre la hoja actualmente activa:
 
-Antes de reemplazar la hoja, el script busca filas `PENDIENTE` o `ERROR`. Si encuentra alguna, aborta con: `Hay cambios locales pendientes o con error. Sincronízalos o resuélvelos antes de actualizar desde el sistema.`
+- TRABAJADORES → admin_listar_trabajadores();
+- CAMPANIAS → admin_listar_campanias().
 
-## Prueba inicial
+Si la hoja contiene cualquier fila PENDIENTE o ERROR, la actualización se aborta antes de sobrescribir datos con el mensaje:
 
-1. Crear la identidad Auth y su fila en `integraciones_api`.
-2. Configurar las cuatro Script Properties.
-3. Usar `SCC → Actualizar desde sistema` para poblar `TRABAJADORES` e `ID Sistema`.
-4. Editar una fila en A:D y confirmar que pasa a `PENDIENTE` sin perder G/H.
-5. Usar `SCC → Sincronizar datos` y verificar que queda `SINCRONIZADO` con observación vacía.
-6. Probar una fila nueva sin `ID Sistema`; al sincronizar debe recibir el UUID real del backend.
+“Hay cambios locales pendientes o con error. Sincronízalos o resuélvelos antes de actualizar desde el sistema.”
+
+## Archivos de Apps Script
+
+Copiar al proyecto: Code.gs, Config.gs, Menu.gs, Supabase.gs, Trabajadores.gs, TrabajadoresPure.gs, Campanias.gs y CampaniasPure.gs.
+
+Al abrir el Spreadsheet, onOpen crea el menú SCC y configura las hojas administrativas soportadas.
+
+## Migraciones y riesgo de datos existentes
+
+20260930_admin_campanias.sql reutiliza public.integraciones_api y public.autorizar_integracion_gestion_maestros(); no los recrea.
+
+Antes de aplicar la migración en un entorno real, debe haber como máximo una fila con estado ACTIVA. Si existen varias, la migración se detendrá y Administración deberá decidir manualmente cuáles cerrar antes de volver a ejecutarla.
