@@ -3,6 +3,7 @@ var SCC_CONFIG = Object.freeze({
   hojaCampanias: 'CAMPANIAS',
   hojaVariedades: 'VARIEDADES',
   hojaLotes: 'LOTES',
+  hojaRolesCampania: 'ROLES_CAMPANIA',
   hojaResumen: 'RESUMEN',
   hojaRanking: 'RANKING',
   hojaProduccionDiaria: 'PRODUCCION_DIARIA',
@@ -42,6 +43,17 @@ var SCC_CONFIG = Object.freeze({
     nombre: 2,
     campania: 3,
     variedad: 4,
+    activo: 5,
+    estadoSync: 6,
+    observacion: 7,
+    idSistema: 8,
+    ultimaSincronizacion: 9
+  }),
+  columnasRolesCampania: Object.freeze({
+    dni: 1,
+    trabajador: 2,
+    campania: 3,
+    rol: 4,
     activo: 5,
     estadoSync: 6,
     observacion: 7,
@@ -103,4 +115,16 @@ var SCC_ENCABEZADOS_LOTES = [
   'Observación',
   'ID Sistema',
   'Última sincronización'
+];
+
+var SCC_ENCABEZADOS_ROLES_CAMPANIA = [
+  'DNI',
+  'Trabajador',
+  'Campa\u00f1a',
+  'Rol',
+  'Activo',
+  'Estado Sync',
+  'Observaci\u00f3n',
+  'ID Sistema',
+  '\u00daltima sincronizaci\u00f3n'
 ];

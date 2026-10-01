@@ -13,6 +13,7 @@ function menuSincronizarDatos() {
   var campanias = ejecutarSincronizacionMaestroScc_(sincronizarCampanias_);
   var variedades = ejecutarSincronizacionMaestroScc_(sincronizarVariedades_);
   var lotes = ejecutarSincronizacionMaestroScc_(sincronizarLotes_);
+  var rolesCampania = ejecutarSincronizacionMaestroScc_(sincronizarRolesCampania_);
 
   ui.alert(
     'Sincronización terminada\n\n' +
@@ -22,7 +23,9 @@ function menuSincronizarDatos() {
     '\n\n' +
     formatearResumenSincronizacionScc_('Variedades', variedades) +
     '\n\n' +
-    formatearResumenSincronizacionScc_('Lotes', lotes)
+    formatearResumenSincronizacionScc_('Lotes', lotes) +
+    '\n\n' +
+    formatearResumenSincronizacionScc_('Roles campa\u00f1a', rolesCampania)
   );
 }
 
@@ -41,16 +44,22 @@ function menuActualizarDesdeSistema() {
       total = actualizarVariedadesDesdeSistema_();
     } else if (nombre === SCC_CONFIG.hojaLotes) {
       total = actualizarLotesDesdeSistema_();
+    } else if (nombre === SCC_CONFIG.hojaRolesCampania) {
+      total = actualizarRolesCampaniaDesdeSistema_();
     } else if (esHojaReporteScc_(nombre)) {
       throw new Error('Esta hoja es un reporte. Usa SCC → Actualizar reportes.');
     } else {
       throw new Error(
-        'Selecciona la hoja TRABAJADORES, CAMPANIAS, VARIEDADES o LOTES antes de actualizar desde el sistema.'
+        'Selecciona la hoja TRABAJADORES, CAMPANIAS, VARIEDADES, LOTES o ROLES_CAMPANIA antes de actualizar desde el sistema.'
       );
     }
 
     if (nombre === SCC_CONFIG.hojaCampanias || nombre === SCC_CONFIG.hojaVariedades) {
       refrescarValidacionesLotes_();
+    }
+
+    if (nombre === SCC_CONFIG.hojaTrabajadores || nombre === SCC_CONFIG.hojaCampanias) {
+      refrescarValidacionesRolesCampania_();
     }
 
     ui.alert(nombre + ' actualizado desde el sistema. Registros: ' + total + '.');

@@ -4,14 +4,14 @@ PostgreSQL en Supabase es la fuente oficial. Google Sheets funciona como interfa
 
 Hay dos sentidos separados:
 
-- **MAESTROS — Sheets → Supabase:** TRABAJADORES, CAMPANIAS, VARIEDADES y LOTES.
+- **MAESTROS — Sheets → Supabase:** TRABAJADORES, CAMPANIAS, VARIEDADES, LOTES y ROLES_CAMPANIA.
 - **REPORTES — Supabase → Sheets:** RESUMEN, RANKING, PRODUCCION_DIARIA y PRODUCCION_LOTES.
 
 Los reportes se construyen exclusivamente con información que ya llegó a PostgreSQL. Una lectura que continúe pendiente en un PDA offline no aparece en Sheets hasta que el PDA la sincronice con Supabase.
 
 ## Seguridad
 
-Los cuatro maestros reutilizan la misma identidad técnica y el mismo control administrativo existente:
+Los cinco maestros reutilizan la misma identidad técnica y el mismo control administrativo existente:
 
 - cuenta dedicada de Supabase Auth;
 - `auth.uid()`;
@@ -103,6 +103,52 @@ Si se cambia `campanias.codigo` o `variedades.nombre`, las FK de `public.lotes` 
 
 No se implementa DELETE para LOTES. Para retirar un lote se usa Activo = No, preservando su histórico.
 
+## ROLES_CAMPANIA
+
+El maestro `public.trabajador_campania_rol` usa UUID como identidad persistente y la restricción real `UNIQUE (trabajador_id, campania_id, rol)`. Cuando una fila todavía no tiene ID Sistema, el fallback administrativo usa exactamente esa triple identidad. DNI, nombre del trabajador y código de campaña son referencias visibles de Google Sheets; PostgreSQL persiste UUID.
+
+La hoja ROLES_CAMPANIA usa:
+
+| Columna | Campo | Uso |
+| --- | --- | --- |
+| A | DNI | Editable; referencia visible al trabajador |
+| B | Trabajador | Informativa; se completa desde TRABAJADORES al editar el DNI |
+| C | Campaña | Editable; muestra `campanias.codigo` |
+| D | Rol | Editable; `COSECHADOR`, `JABERO` o `SUPERVISORA` |
+| E | Activo | Editable; dropdown Sí/No |
+| F | Estado Sync | Técnica |
+| G | Observación | Técnica |
+| H | ID Sistema | Técnica |
+| I | Última sincronización | Técnica |
+
+F:I quedan protegidas. Editar A, C, D o E marca la fila PENDIENTE, limpia la observación y conserva H:I. B es solo informativa. `onEdit` solo usa datos ya presentes en el Spreadsheet; no llama Supabase.
+
+### Resolución de referencias
+
+El trabajador se resuelve así: `ROLES_CAMPANIA.DNI → TRABAJADORES.DNI → TRABAJADORES.ID Sistema → trabajador_id`.
+
+La campaña se resuelve así: `ROLES_CAMPANIA.Campaña → CAMPANIAS.codigo → CAMPANIAS.ID Sistema → campania_id`.
+
+La fila de TRABAJADORES o CAMPANIAS referenciada debe estar SINCRONIZADA y tener un UUID válido. El nombre visible y el DNI no sustituyen al UUID como identidad persistente.
+
+### Reglas de vigencia e históricos
+
+Para una nueva asignación, una reactivación (`Activo: No → Sí`) o un cambio de trabajador, campaña o rol, el trabajador destino debe estar activo y la campaña destino debe estar ACTIVA.
+
+Una asignación histórica puede conservar su trabajador aunque luego quede inactivo y su campaña aunque luego quede CERRADA, siempre que no cambie la triple identidad. No se implementa DELETE; una asignación se retira con Activo = No.
+
+Los dropdowns de trabajador y campaña solo ofrecen referencias sincronizadas y vigentes. Esas dos referencias usan `allowInvalid(true)` para que un valor histórico cargado desde PostgreSQL siga siendo visible aunque ya no aparezca como opción operativa. El dropdown de Rol bloquea valores libres y solo acepta `COSECHADOR`, `JABERO` o `SUPERVISORA`.
+
+### Acceso a la aplicación
+
+`TRABAJADOR`, `ROL EN CAMPAÑA` y `ACCESO A PWA` son conceptos distintos. Un trabajador puede existir sin rol de campaña, y un rol `COSECHADOR` no concede acceso a la PWA por sí solo.
+
+`admin_guardar_rol_campania` recalcula `usuarios_app.activo` después de cada cambio. El acceso queda vigente cuando el trabajador conserva al menos un rol activo aplicable (`JABERO` o `SUPERVISORA`) dentro de una campaña ACTIVA. Si una fila cambia de trabajador, se recalcula tanto el trabajador anterior como el nuevo para evitar dejar acceso habilitado por una relación que ya no existe.
+
+La integración técnica de Google Sheets no corresponde a un registro de `usuarios_app`. Por eso, una asignación nueva guarda `registrado_por_usuario_id = NULL`; las actualizaciones no sobrescriben ese campo y conservan el valor histórico existente.
+
+`admin_listar_roles_campania()` incluye asignaciones activas e inactivas e informa las referencias visibles y el estado de acceso resultante.
+
 ## Sincronizar datos
 
 `SCC → Sincronizar datos` procesa en este orden:
@@ -111,10 +157,13 @@ No se implementa DELETE para LOTES. Para retirar un lote se usa Activo = No, pre
 2. CAMPANIAS
 3. VARIEDADES
 4. LOTES
+5. ROLES_CAMPANIA
 
 Cada maestro procesa únicamente filas PENDIENTE y aísla los errores por fila. Un error de una fila no detiene las siguientes; un error general de un maestro no impide intentar los demás.
 
 LOTES se ejecuta al final. En ese momento Apps Script vuelve a leer CAMPANIAS y VARIEDADES, de modo que una campaña o variedad sincronizada durante esa misma ejecución puede usarse inmediatamente en una fila LOTES.
+
+ROLES_CAMPANIA se ejecuta después de los maestros que resuelven sus referencias. Relee TRABAJADORES y CAMPANIAS, de modo que un trabajador o una campaña sincronizados en la misma ejecución pueden usarse inmediatamente. Antes de guardar obtiene una instantánea con `admin_listar_roles_campania()` para distinguir históricos, reactivaciones y cambios de identidad.
 
 Antes de procesar LOTES se obtiene una instantánea con `admin_listar_lotes()`. Esa instantánea permite distinguir una relación histórica sin cambios de una nueva asignación y aplicar correctamente las reglas ACTIVA/activo.
 
@@ -125,7 +174,8 @@ Antes de procesar LOTES se obtiene una instantánea con `admin_listar_lotes()`. 
 - TRABAJADORES → `admin_listar_trabajadores()`;
 - CAMPANIAS → `admin_listar_campanias()`;
 - VARIEDADES → `admin_listar_variedades()`;
-- LOTES → `admin_listar_lotes()`.
+- LOTES → `admin_listar_lotes()`;
+- ROLES_CAMPANIA → `admin_listar_roles_campania()`.
 
 Si la hoja activa contiene cualquier fila PENDIENTE o ERROR, se aborta antes de reconstruir para no sobrescribir cambios locales.
 
@@ -150,7 +200,7 @@ Ambas RPC llaman primero a `public.autorizar_integracion_gestion_maestros()`, re
 
 ## Archivos de Apps Script
 
-El proyecto administrativo usa `Code.gs`, `Config.gs`, `Menu.gs`, `Supabase.gs`, `Trabajadores.gs`, `TrabajadoresPure.gs`, `Campanias.gs`, `CampaniasPure.gs`, `Variedades.gs`, `VariedadesPure.gs`, `Lotes.gs`, `LotesPure.gs`, `Reportes.gs` y `ReportesPure.gs`.
+El proyecto administrativo usa `Code.gs`, `Config.gs`, `Menu.gs`, `Supabase.gs`, `Trabajadores.gs`, `TrabajadoresPure.gs`, `Campanias.gs`, `CampaniasPure.gs`, `Variedades.gs`, `VariedadesPure.gs`, `Lotes.gs`, `LotesPure.gs`, `RolesCampania.gs`, `RolesCampaniaPure.gs`, `Reportes.gs` y `ReportesPure.gs`.
 
 Al abrir el Spreadsheet, `onOpen` crea el menú SCC y configura las hojas administrativas y de reportes.
 
@@ -201,5 +251,7 @@ Las RPC operativas existentes de la PWA no se modifican; las versiones administr
 ## Migraciones
 
 `20260930_admin_lotes.sql` reutiliza `public.integraciones_api` y `public.autorizar_integracion_gestion_maestros()`; no los recrea. La migración solo crea las RPC administrativas de LOTES, configura sus permisos y solicita la recarga del schema de PostgREST.
+
+`20261001_admin_roles_campania.sql` crea `admin_guardar_rol_campania(...)` y `admin_listar_roles_campania()`, conserva la identidad `UNIQUE (trabajador_id, campania_id, rol)`, aplica las reglas de vigencia para nuevas asignaciones/reactivaciones/cambios de identidad y recalcula `usuarios_app`. Revoca ejecución de PUBLIC/anon, concede `EXECUTE` únicamente a `authenticated` y solicita `NOTIFY pgrst, 'reload schema'`.
 
 `20260930_admin_reportes_sheets.sql` agrega `puede_consultar_reportes` con `DEFAULT false`, crea `public.autorizar_integracion_reportes()` y las cuatro RPC administrativas de consulta. Revoca acceso de PUBLIC/anon, concede `EXECUTE` únicamente a `authenticated` y solicita `NOTIFY pgrst, 'reload schema'`. La migración no asigna el permiso a ninguna integración existente y no modifica datos remotos por sí sola.

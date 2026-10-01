@@ -21,6 +21,11 @@ function onOpen() {
     Logger.log('No se pudo configurar LOTES al abrir: %s', error.message);
   }
   try {
+    configurarHojaRolesCampania_();
+  } catch (error) {
+    Logger.log('No se pudo configurar ROLES_CAMPANIA al abrir: %s', error.message);
+  }
+  try {
     configurarHojasReportes_();
   } catch (error) {
     Logger.log('No se pudieron configurar los reportes al abrir: %s', error.message);
@@ -33,4 +38,5 @@ function onEdit(e) {
   marcarEdicionCampanias_(e);
   marcarEdicionVariedades_(e);
   marcarEdicionLotes_(e);
+  marcarEdicionRolesCampania_(e);
 }
