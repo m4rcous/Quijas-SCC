@@ -20,9 +20,15 @@ function onOpen() {
   } catch (error) {
     Logger.log('No se pudo configurar LOTES al abrir: %s', error.message);
   }
+  try {
+    configurarHojasReportes_();
+  } catch (error) {
+    Logger.log('No se pudieron configurar los reportes al abrir: %s', error.message);
+  }
 }
 
 function onEdit(e) {
+  if (e && e.range && esHojaReporteScc_(e.range.getSheet().getName())) return;
   marcarEdicionTrabajadores_(e);
   marcarEdicionCampanias_(e);
   marcarEdicionVariedades_(e);

@@ -3,6 +3,10 @@ var SCC_CONFIG = Object.freeze({
   hojaCampanias: 'CAMPANIAS',
   hojaVariedades: 'VARIEDADES',
   hojaLotes: 'LOTES',
+  hojaResumen: 'RESUMEN',
+  hojaRanking: 'RANKING',
+  hojaProduccionDiaria: 'PRODUCCION_DIARIA',
+  hojaProduccionLotes: 'PRODUCCION_LOTES',
   filaEncabezado: 1,
   columnas: Object.freeze({
     dni: 1,

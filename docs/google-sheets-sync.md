@@ -1,8 +1,13 @@
 # Sincronización SCC con Google Sheets
 
-PostgreSQL en Supabase es la fuente oficial. Google Sheets funciona como interfaz administrativa para los maestros TRABAJADORES, CAMPANIAS, VARIEDADES y LOTES.
+PostgreSQL en Supabase es la fuente oficial. Google Sheets funciona como interfaz administrativa para maestros y como salida manual de reportes.
 
-Flujo: Administración → Google Sheets → Apps Script → Supabase Auth → RPC administrativa → PostgreSQL.
+Hay dos sentidos separados:
+
+- **MAESTROS — Sheets → Supabase:** TRABAJADORES, CAMPANIAS, VARIEDADES y LOTES.
+- **REPORTES — Supabase → Sheets:** RESUMEN, RANKING, PRODUCCION_DIARIA y PRODUCCION_LOTES.
+
+Los reportes se construyen exclusivamente con información que ya llegó a PostgreSQL. Una lectura que continúe pendiente en un PDA offline no aparece en Sheets hasta que el PDA la sincronice con Supabase.
 
 ## Seguridad
 
@@ -15,7 +20,22 @@ Los cuatro maestros reutilizan la misma identidad técnica y el mismo control ad
 - `puede_gestionar_maestros = true`;
 - `public.autorizar_integracion_gestion_maestros()`.
 
+La consulta de reportes usa un permiso independiente:
+
+- `puede_consultar_reportes = true`;
+- `public.autorizar_integracion_reportes()`.
+
+Tener `authenticated` o `puede_gestionar_maestros` no habilita reportes por sí solo. Todas las RPC de reportes son `SECURITY DEFINER`, se conceden únicamente a `authenticated` y verifican además `auth.uid()`, `integraciones_api.activo = true` y `puede_consultar_reportes = true`.
+
 No se usa `service_role`, no se crean credenciales nuevas y las RPC administrativas no se conceden a `anon`. La integración conserva las mismas cuatro Script Properties: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_INTEGRATION_EMAIL` y `SUPABASE_INTEGRATION_PASSWORD`.
+
+Después de aplicar `20260930_admin_reportes_sheets.sql`, el permiso de reportes debe concederse manualmente a la identidad técnica ya existente. La migración no lo activa para ninguna cuenta:
+
+```sql
+update public.integraciones_api
+set puede_consultar_reportes = true
+where auth_user_id = '<UUID cuenta Sheets>';
+```
 
 ## TRABAJADORES
 
@@ -109,6 +129,8 @@ Antes de procesar LOTES se obtiene una instantánea con `admin_listar_lotes()`. 
 
 Si la hoja activa contiene cualquier fila PENDIENTE o ERROR, se aborta antes de reconstruir para no sobrescribir cambios locales.
 
+Si la hoja activa es RESUMEN, RANKING, PRODUCCION_DIARIA o PRODUCCION_LOTES, el comando no intenta tratarla como maestro y muestra: `Esta hoja es un reporte. Usa SCC → Actualizar reportes.`
+
 Al reconstruir LOTES se escribe Código, Nombre, código visible de campaña, nombre visible de variedad, Sí/No, SINCRONIZADO, observación vacía, UUID real y timestamp actual. Después se recalculan los dropdowns.
 
 ## RPC de LOTES
@@ -128,10 +150,56 @@ Ambas RPC llaman primero a `public.autorizar_integracion_gestion_maestros()`, re
 
 ## Archivos de Apps Script
 
-El proyecto administrativo usa `Code.gs`, `Config.gs`, `Menu.gs`, `Supabase.gs`, `Trabajadores.gs`, `TrabajadoresPure.gs`, `Campanias.gs`, `CampaniasPure.gs`, `Variedades.gs`, `VariedadesPure.gs`, `Lotes.gs` y `LotesPure.gs`.
+El proyecto administrativo usa `Code.gs`, `Config.gs`, `Menu.gs`, `Supabase.gs`, `Trabajadores.gs`, `TrabajadoresPure.gs`, `Campanias.gs`, `CampaniasPure.gs`, `Variedades.gs`, `VariedadesPure.gs`, `Lotes.gs`, `LotesPure.gs`, `Reportes.gs` y `ReportesPure.gs`.
 
-Al abrir el Spreadsheet, `onOpen` crea el menú SCC y configura las cuatro hojas administrativas.
+Al abrir el Spreadsheet, `onOpen` crea el menú SCC y configura las hojas administrativas y de reportes.
+
+## Actualizar reportes
+
+`SCC → Actualizar reportes` consulta, valida y actualiza de forma independiente:
+
+1. RESUMEN → `admin_obtener_resumen_campania(p_zona_horaria)`;
+2. RANKING → `admin_obtener_ranking_cosechadores()`;
+3. PRODUCCION_DIARIA → `admin_obtener_produccion_diaria(p_zona_horaria)`;
+4. PRODUCCION_LOTES → `admin_obtener_produccion_lotes()`.
+
+RESUMEN y PRODUCCION_DIARIA reciben `SpreadsheetApp.getActive().getSpreadsheetTimeZone()`. La zona no está hardcodeada. Las fechas PostgreSQL `date` (`YYYY-MM-DD`) se convierten como fecha calendario mediante el timezone del Spreadsheet, sin pasar por una representación UTC que pueda cambiar el día. Los `timestamptz`, como `ultima_lectura`, sí se convierten como instantes y se muestran con formato `dd/MM/yyyy HH:mm` en la zona del Spreadsheet.
+
+Cada reporte sigue el flujo consultar RPC → validar/normalizar respuesta → reemplazar hoja. Si la consulta o validación falla, no se borra el reporte visible anterior. El error se registra para ese reporte y se continúan intentando los demás. Al final se muestra un resumen con OK/ERROR por hoja.
+
+Las hojas de reportes son salida del sistema. No usan Estado Sync, Observación, ID Sistema ni Última sincronización; no se marcan PENDIENTE, no participan en `onEdit` y `SCC → Sincronizar datos` nunca las envía a PostgreSQL.
+
+### RESUMEN
+
+Presenta una vista administrativa simple con campaña, fecha de inicio, total de jabas, cosechadores con producción, lotes con producción, sesiones, días con producción, última actividad y timestamp de última actualización del Spreadsheet. Si existe campaña activa sin producción, las métricas se muestran en cero y la última actividad queda vacía.
+
+### RANKING
+
+Columnas: Posición, DNI, Cosechador, Jabas y Última lectura. El orden y la posición vienen del backend; Apps Script no recalcula el ranking y conserva empates producidos por `DENSE_RANK`. Sin producción se conserva el encabezado y se muestra una fila informativa.
+
+### PRODUCCION_DIARIA
+
+Columnas: Fecha, Jabas, Cosechadores y Sesiones. El backend entrega los días de producción del más reciente al más antiguo. Si no hay producción se conserva únicamente el encabezado.
+
+### PRODUCCION_LOTES
+
+Columnas: Lote, Nombre, Variedad, Jabas, Cosechadores, Sesiones y Última lectura. El orden viene del backend. Si no hay producción se conserva únicamente el encabezado.
+
+Los cuatro reportes se protegen como hojas generadas por el sistema, congelan encabezados cuando corresponde y usan formatos numéricos y de fecha simples, sin dashboards ni gráficos.
+
+## Reglas de negocio de los reportes
+
+Las RPC administrativas replican el SQL ya usado por SCC operativo. Una fila de `lecturas_jaba` equivale a una jaba, por lo que `total_jabas` usa siempre `COUNT(lj.id)`. No se deduplican tickets.
+
+- RESUMEN: `COUNT(lj.id)`, cosechadores distintos, lotes distintos, sesiones distintas, días distintos en el timezone solicitado y `MAX(lj.fecha_hora)`.
+- RANKING: `COUNT(lj.id)`, `DENSE_RANK` por `total_jabas DESC` y última lectura por cosechador.
+- PRODUCCION_DIARIA: agrupa `(lj.fecha_hora AT TIME ZONE p_zona_horaria)::date`, con jabas, cosechadores y sesiones.
+- PRODUCCION_LOTES: jabas, cosechadores, sesiones y última lectura por lote.
+
+Las RPC operativas existentes de la PWA no se modifican; las versiones administrativas son paralelas y no requieren `p_dni_operador`.
 
 ## Migraciones
 
 `20260930_admin_lotes.sql` reutiliza `public.integraciones_api` y `public.autorizar_integracion_gestion_maestros()`; no los recrea. La migración solo crea las RPC administrativas de LOTES, configura sus permisos y solicita la recarga del schema de PostgREST.
+
+`20260930_admin_reportes_sheets.sql` agrega `puede_consultar_reportes` con `DEFAULT false`, crea `public.autorizar_integracion_reportes()` y las cuatro RPC administrativas de consulta. Revoca acceso de PUBLIC/anon, concede `EXECUTE` únicamente a `authenticated` y solicita `NOTIFY pgrst, 'reload schema'`. La migración no asigna el permiso a ninguna integración existente y no modifica datos remotos por sí sola.

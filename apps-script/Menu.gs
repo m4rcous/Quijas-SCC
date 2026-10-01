@@ -3,6 +3,7 @@ function crearMenuScc_() {
     .createMenu('SCC')
     .addItem('Sincronizar datos', 'menuSincronizarDatos')
     .addItem('Actualizar desde sistema', 'menuActualizarDesdeSistema')
+    .addItem('Actualizar reportes', 'menuActualizarReportes')
     .addToUi();
 }
 
@@ -40,6 +41,8 @@ function menuActualizarDesdeSistema() {
       total = actualizarVariedadesDesdeSistema_();
     } else if (nombre === SCC_CONFIG.hojaLotes) {
       total = actualizarLotesDesdeSistema_();
+    } else if (esHojaReporteScc_(nombre)) {
+      throw new Error('Esta hoja es un reporte. Usa SCC → Actualizar reportes.');
     } else {
       throw new Error(
         'Selecciona la hoja TRABAJADORES, CAMPANIAS, VARIEDADES o LOTES antes de actualizar desde el sistema.'
@@ -54,6 +57,15 @@ function menuActualizarDesdeSistema() {
   } catch (error) {
     ui.alert(error.message || 'No se pudo actualizar desde el sistema.');
   }
+}
+
+function menuActualizarReportes() {
+  var ui = SpreadsheetApp.getUi();
+  var resultados = actualizarReportes_();
+  ui.alert(
+    'Actualización de reportes terminada\n\n' +
+    formatearResultadoActualizacionReportesScc_(resultados)
+  );
 }
 
 function ejecutarSincronizacionMaestroScc_(sincronizar) {
