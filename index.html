@@ -176,6 +176,12 @@
             <p>Consulte información consolidada de la operación.</p>
           </div>
           <div class="menu-grid">
+            <button id="btn-reporte-resumen" class="home-action-tile">
+              <span class="home-action-tile__icon home-action-tile__icon--harvest"
+                ><svg><use href="#icon-crate"></use></svg
+              ></span>
+              <span class="home-action-tile__title">Resumen de campaña</span>
+            </button>
             <button id="btn-reporte-ranking" class="home-action-tile">
               <span class="home-action-tile__icon home-action-tile__icon--harvest"
                 ><svg><use href="#icon-user"></use></svg
@@ -194,6 +200,84 @@
               ></span>
               <span class="home-action-tile__title">Producción por lote</span>
             </button>
+          </div>
+        </div>
+      </section>
+
+      <section id="vista-resumen-campania" class="pantalla pantalla-datos oculto">
+        <header class="app-header">
+          <button
+            id="btn-volver-resumen"
+            class="icon-button btn-secondary"
+            aria-label="Volver a reportes"
+          >
+            <svg aria-hidden="true"><use href="#icon-arrow-left"></use></svg>
+          </button>
+          <div class="app-header__title">Resumen de campaña</div>
+          <span class="app-header__spacer"></span>
+        </header>
+        <div class="contenido contenido-datos">
+          <div class="titulo-pagina titulo-pagina--datos">
+            <p class="eyebrow">Reporte global</p>
+            <h1>Resumen de campaña</h1>
+            <p id="resumen-campania-nombre">Campaña activa</p>
+            <p id="resumen-campania-fecha" class="resumen-campania__fecha oculto"></p>
+          </div>
+          <div class="report-toolbar">
+            <button
+              id="btn-actualizar-resumen"
+              type="button"
+              class="icon-button btn-secondary"
+              aria-label="Actualizar resumen de campaña"
+              title="Actualizar"
+            >
+              <svg aria-hidden="true"><use href="#icon-refresh"></use></svg>
+            </button>
+          </div>
+          <div
+            id="resumen-campania-feedback"
+            class="resultado ranking-feedback oculto"
+            aria-live="polite"
+          ></div>
+          <button
+            id="btn-reintentar-resumen"
+            type="button"
+            class="btn-secondary reporte-retry oculto"
+          >
+            Reintentar
+          </button>
+          <div id="resumen-campania-contenido" class="resumen-campania oculto">
+            <article
+              class="metric-card metric-card--primary resumen-campania__principal"
+            >
+              <span class="stat-label">Total de jabas</span>
+              <strong id="resumen-total-jabas" class="stat-numero">0</strong>
+            </article>
+            <div class="resumen-campania__grid">
+              <article class="metric-card">
+                <span class="stat-label">Cosechadores</span>
+                <strong id="resumen-total-cosechadores" class="stat-numero">0</strong>
+              </article>
+              <article class="metric-card">
+                <span class="stat-label">Lotes</span>
+                <strong id="resumen-total-lotes" class="stat-numero">0</strong>
+              </article>
+              <article class="metric-card">
+                <span class="stat-label">Sesiones</span>
+                <strong id="resumen-total-sesiones" class="stat-numero">0</strong>
+              </article>
+              <article class="metric-card">
+                <span class="stat-label">Días con producción</span>
+                <strong id="resumen-dias-produccion" class="stat-numero">0</strong>
+              </article>
+            </div>
+            <article class="resumen-campania__actividad">
+              <span>Última actividad</span>
+              <strong id="resumen-ultima-actividad">Sin actividad registrada</strong>
+            </article>
+            <p id="resumen-campania-empty" class="resumen-campania__empty oculto">
+              Aún no hay producción registrada en esta campaña.
+            </p>
           </div>
         </div>
       </section>

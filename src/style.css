@@ -1205,6 +1205,74 @@ select:disabled {
   margin: calc(var(--space-2) * -1) 0 var(--space-3);
 }
 
+.resumen-campania {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.resumen-campania__fecha {
+  margin-top: var(--space-1);
+  color: var(--color-ink-600);
+  font-size: var(--font-size-sm);
+  font-weight: 650;
+}
+
+.resumen-campania__principal {
+  display: flex;
+  min-height: 132px;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.resumen-campania__principal .stat-label {
+  min-height: 0;
+}
+
+.resumen-campania__principal .stat-numero {
+  font-size: clamp(2.35rem, 11vw, 3.35rem);
+}
+
+.resumen-campania__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.resumen-campania__grid .metric-card {
+  min-height: 96px;
+}
+
+.resumen-campania__actividad {
+  display: grid;
+  gap: 4px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-line-200);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-100);
+}
+
+.resumen-campania__actividad span {
+  color: var(--color-ink-600);
+  font-size: var(--font-size-sm);
+  font-weight: 650;
+}
+
+.resumen-campania__actividad strong {
+  color: var(--color-ink-900);
+  font-size: var(--font-size-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.resumen-campania__empty {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-150);
+  color: var(--color-ink-700);
+  font-size: var(--font-size-sm);
+  font-weight: 650;
+}
+
 .produccion-table th:first-child,
 .produccion-table td:first-child {
   width: 42%;

@@ -87,6 +87,14 @@ import {
   reemplazarProduccionLotes,
   resumirProduccionLotes
 } from './modules/produccionLotes'
+import {
+  esErrorConexionResumenCampania,
+  formatearFechaInicioCampania,
+  formatearNumeroResumen,
+  formatearUltimaActividad,
+  obtenerResumenCampania,
+  reemplazarResumenCampania
+} from './modules/resumenCampania'
 
 // VISTAS
 
@@ -98,6 +106,7 @@ const vistaLectura = document.querySelector('#vista-lectura')
 const vistaSync = document.querySelector('#vista-sync')
 const vistaConsulta = document.querySelector('#vista-consulta')
 const vistaReportes = document.querySelector('#vista-reportes')
+const vistaResumenCampania = document.querySelector('#vista-resumen-campania')
 const vistaRankingCosechadores = document.querySelector('#vista-ranking-cosechadores')
 const vistaProduccionDiaria = document.querySelector('#vista-produccion-diaria')
 const vistaProduccionLotes = document.querySelector('#vista-produccion-lotes')
@@ -124,6 +133,21 @@ const estadoConexion = document.querySelector('#estado-conexion')
 // REPORTES
 
 const btnVolverReportes = document.querySelector('#btn-volver-reportes')
+const btnReporteResumen = document.querySelector('#btn-reporte-resumen')
+const btnVolverResumen = document.querySelector('#btn-volver-resumen')
+const btnActualizarResumen = document.querySelector('#btn-actualizar-resumen')
+const btnReintentarResumen = document.querySelector('#btn-reintentar-resumen')
+const resumenCampaniaNombre = document.querySelector('#resumen-campania-nombre')
+const resumenCampaniaFecha = document.querySelector('#resumen-campania-fecha')
+const resumenCampaniaFeedback = document.querySelector('#resumen-campania-feedback')
+const resumenCampaniaContenido = document.querySelector('#resumen-campania-contenido')
+const resumenTotalJabas = document.querySelector('#resumen-total-jabas')
+const resumenTotalCosechadores = document.querySelector('#resumen-total-cosechadores')
+const resumenTotalLotes = document.querySelector('#resumen-total-lotes')
+const resumenTotalSesiones = document.querySelector('#resumen-total-sesiones')
+const resumenDiasProduccion = document.querySelector('#resumen-dias-produccion')
+const resumenUltimaActividad = document.querySelector('#resumen-ultima-actividad')
+const resumenCampaniaEmpty = document.querySelector('#resumen-campania-empty')
 const btnReporteRanking = document.querySelector('#btn-reporte-ranking')
 const btnVolverRanking = document.querySelector('#btn-volver-ranking')
 const btnActualizarRanking = document.querySelector('#btn-actualizar-ranking')
@@ -304,6 +328,7 @@ let cosechadoresJabasActual = []
 let ordenCosechadoresJabas = ORDEN_COSECHADORES_JABAS.MAS_JABAS
 let sesionesConsultaActual = []
 let filtroSesionesLectura = FILTROS_SESIONES_LECTURA.TODAS
+let resumenCampaniaActual = null
 let rankingCosechadoresActual = []
 let produccionDiariaActual = []
 let produccionDiariaCampaniaActual = ''
@@ -1031,6 +1056,92 @@ function abrirDetalleSesionLectura(sesion) {
   btnCerrarContexto.focus()
 }
 
+async function abrirResumenCampania() {
+  mostrarVista(vistaResumenCampania)
+
+  if (resumenCampaniaActual) {
+    renderResumenCampania()
+  } else {
+    resumenCampaniaNombre.textContent = 'Campaña activa'
+    resumenCampaniaFecha.classList.add('oculto')
+    resumenCampaniaContenido.classList.add('oculto')
+  }
+
+  await cargarResumenCampania()
+}
+
+async function cargarResumenCampania() {
+  btnActualizarResumen.disabled = true
+  btnReintentarResumen.classList.add('oculto')
+  mostrarFeedbackResumenCampania('Cargando resumen…')
+
+  if (!navigator.onLine) {
+    mostrarFeedbackResumenCampania(
+      'No se puede actualizar el resumen sin conexión.',
+      'error',
+      true
+    )
+    btnActualizarResumen.disabled = false
+    return
+  }
+
+  try {
+    const respuesta = await obtenerResumenCampania(operador.dni, (nombre, parametros) =>
+      supabase.rpc(nombre, parametros)
+    )
+    resumenCampaniaActual = reemplazarResumenCampania(resumenCampaniaActual, respuesta)
+    ocultarFeedbackResumenCampania()
+    renderResumenCampania()
+  } catch (error) {
+    const mensaje = esErrorConexionResumenCampania(error)
+      ? 'No se puede actualizar el resumen sin conexión.'
+      : `No se pudo cargar el resumen: ${error.message}`
+    mostrarFeedbackResumenCampania(mensaje, 'error', true)
+
+    if (!resumenCampaniaActual) {
+      resumenCampaniaContenido.classList.add('oculto')
+    }
+  } finally {
+    btnActualizarResumen.disabled = false
+  }
+}
+
+function renderResumenCampania() {
+  if (!resumenCampaniaActual) return
+
+  const { campania, resumen } = resumenCampaniaActual
+  resumenCampaniaNombre.textContent = campania.nombre || 'Campaña activa'
+
+  const fechaInicio = formatearFechaInicioCampania(campania.fecha_inicio)
+  resumenCampaniaFecha.textContent = fechaInicio ? `Desde ${fechaInicio}` : ''
+  resumenCampaniaFecha.classList.toggle('oculto', !fechaInicio)
+
+  resumenTotalJabas.textContent = formatearNumeroResumen(resumen.total_jabas)
+  resumenTotalCosechadores.textContent = formatearNumeroResumen(
+    resumen.total_cosechadores
+  )
+  resumenTotalLotes.textContent = formatearNumeroResumen(resumen.total_lotes)
+  resumenTotalSesiones.textContent = formatearNumeroResumen(resumen.total_sesiones)
+  resumenDiasProduccion.textContent = formatearNumeroResumen(
+    resumen.dias_con_produccion
+  )
+  resumenUltimaActividad.textContent = formatearUltimaActividad(resumen.ultima_lectura)
+  resumenCampaniaEmpty.classList.toggle('oculto', resumen.total_jabas > 0)
+  resumenCampaniaContenido.classList.remove('oculto')
+}
+
+function mostrarFeedbackResumenCampania(mensaje, tipo = '', permitirReintento = false) {
+  resumenCampaniaFeedback.textContent = mensaje
+  resumenCampaniaFeedback.className = `resultado ranking-feedback${tipo ? ` ${tipo}` : ''}`
+  btnReintentarResumen.classList.toggle('oculto', !permitirReintento)
+}
+
+function ocultarFeedbackResumenCampania() {
+  resumenCampaniaFeedback.textContent = ''
+  resumenCampaniaFeedback.className = 'resultado ranking-feedback oculto'
+  btnReintentarResumen.classList.add('oculto')
+}
+
 async function abrirRankingCosechadores() {
   rankingBusqueda.value = ''
   rankingCosechadoresActual = []
@@ -1444,6 +1555,8 @@ consultaBusqueda.addEventListener('input', () => {
 
 rankingBusqueda.addEventListener('input', renderRankingCosechadores)
 btnActualizarRanking.addEventListener('click', cargarRankingCosechadores)
+btnActualizarResumen.addEventListener('click', cargarResumenCampania)
+btnReintentarResumen.addEventListener('click', cargarResumenCampania)
 btnActualizarProduccion.addEventListener('click', cargarProduccionDiaria)
 btnReintentarProduccion.addEventListener('click', cargarProduccionDiaria)
 lotesBusqueda.addEventListener('input', renderProduccionLotes)
@@ -1539,6 +1652,8 @@ btnMenuReportes.addEventListener('click', () => {
 })
 
 btnVolverReportes.addEventListener('click', mostrarMenu)
+btnReporteResumen.addEventListener('click', abrirResumenCampania)
+btnVolverResumen.addEventListener('click', () => mostrarVista(vistaReportes))
 btnReporteRanking.addEventListener('click', abrirRankingCosechadores)
 btnVolverRanking.addEventListener('click', () => mostrarVista(vistaReportes))
 btnReporteProduccion.addEventListener('click', abrirProduccionDiaria)
@@ -1827,6 +1942,7 @@ function mostrarVista(vista) {
   vistaSync.classList.add('oculto')
   vistaConsulta.classList.add('oculto')
   vistaReportes.classList.add('oculto')
+  vistaResumenCampania.classList.add('oculto')
   vistaRankingCosechadores.classList.add('oculto')
   vistaProduccionDiaria.classList.add('oculto')
   vistaProduccionLotes.classList.add('oculto')
