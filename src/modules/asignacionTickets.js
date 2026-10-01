@@ -2,7 +2,7 @@ import { supabase } from '../supabase'
 import { buscarCosechadorLocal } from './cosechadorLocal'
 
 export async function buscarCosechador(dni) {
-  return buscarCosechadorLocal(dni)
+  return buscarCosechadorLocal(dni, { permitirProvisional: true })
 }
 
 export async function asignarTicket({

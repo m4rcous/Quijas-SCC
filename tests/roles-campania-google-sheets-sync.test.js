@@ -155,7 +155,7 @@ test('13. cambio de identidad exige vigencia', () => {
 
 test('14. SQL con UUID actualiza exactamente por ID', () => {
   assert.match(sql, /where tcr\.id = p_rol_id;/i)
-  assert.match(sql, /El rol de campa\\00F1a indicado no existe/i)
+  assert.match(sql, /El rol de campaña indicado no existe/i)
   assert.match(sql, /where id = v_rol\.id\s+returning \* into v_rol;/i)
 })
 
@@ -172,7 +172,7 @@ test('16. identidad persistente no usa DNI ni nombre visible', () => {
 })
 
 test('17. unique_violation tiene mensaje administrativo', () => {
-  assert.match(sql, /when unique_violation then\s+raise exception U&'El trabajador ya tiene ese rol en la campa\\00F1a seleccionada'/i)
+  assert.match(sql, /when unique_violation then\s+raise exception 'El trabajador ya tiene ese rol en la campaña seleccionada'/i)
 })
 
 test('18. onEdit solo marca A, C, D o E desde fila 2', () => {

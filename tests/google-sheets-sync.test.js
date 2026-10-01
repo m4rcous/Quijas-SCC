@@ -161,3 +161,28 @@ test('respuesta de listado se normaliza', () => {
   assert.equal(resultado[0].apellidos, 'Pérez')
   assert.equal(resultado[0].activo, true)
 })
+
+test('actualizar desde sistema acepta trabajadores provisionales sin nombres', () => {
+  const resultado = normalizarListadoTrabajadoresScc_({
+    ok: true,
+    trabajadores: [
+      {
+        id: UUID_2,
+        dni: '74821563',
+        nombres: '',
+        apellidos: '   ',
+        activo: true
+      }
+    ]
+  })
+
+  assert.equal(resultado[0].nombres, '')
+  assert.equal(resultado[0].apellidos, '')
+  assert.throws(
+    () =>
+      prepararTrabajadorParaGuardarScc_(
+        fila({ dni: '74821563', nombres: '', apellidos: '' })
+      ),
+    /nombres son obligatorios/
+  )
+})

@@ -2,6 +2,7 @@ import './style.css'
 import { supabase } from './supabase'
 import { validarOperador } from './modules/auth'
 import { buscarCosechador } from './modules/asignacionTickets'
+import { nombreCosechadorVisible } from './modules/cosechadorLocal'
 import { actualizarCacheOperativa } from './modules/cacheOperativa'
 import {
   contarLecturasCosechador,
@@ -571,7 +572,7 @@ function renderAsignadosHoy() {
     const cosechadorCell = document.createElement('td')
     cosechadorCell.className = 'industrial-table__person'
     const nombre = document.createElement('strong')
-    nombre.textContent = ticket.cosechador || 'Sin nombre'
+    nombre.textContent = nombreCosechadorVisible(ticket.cosechador, ticket.cosechador_dni)
     const dni = document.createElement('span')
     dni.textContent = ticket.cosechador_dni || 'DNI no disponible'
     cosechadorCell.append(nombre, dni)
@@ -817,7 +818,7 @@ function renderCosechadoresJabas() {
     const personaCell = document.createElement('td')
     personaCell.className = 'industrial-table__person'
     const nombre = document.createElement('strong')
-    nombre.textContent = cosechador.nombre || cosechador.dni || 'Sin identificar'
+    nombre.textContent = nombreCosechadorVisible(cosechador.nombre, cosechador.dni)
     const dni = document.createElement('span')
     dni.textContent = cosechador.dni || 'DNI no disponible'
     personaCell.append(nombre, dni)
@@ -1215,7 +1216,7 @@ function renderRankingCosechadores() {
     const persona = document.createElement('td')
     persona.className = 'industrial-table__person'
     const nombre = document.createElement('strong')
-    nombre.textContent = fila.cosechador || fila.cosechador_dni || 'Sin identificar'
+    nombre.textContent = nombreCosechadorVisible(fila.cosechador, fila.cosechador_dni)
     const dni = document.createElement('span')
     dni.textContent = fila.cosechador_dni || 'DNI no disponible'
     persona.append(nombre, dni)
@@ -1810,7 +1811,7 @@ formCosechador.addEventListener('submit', async (event) => {
   }
   try {
     cosechador = await buscarCosechador(dni)
-    nombreCosechador.textContent = cosechador.nombre
+    nombreCosechador.textContent = nombreCosechadorVisible(cosechador.nombre, cosechador.dni)
     campaniaCosechador.textContent = cosechador.campania
     infoCosechador.classList.remove('oculto')
     desactivarTecladoManual(dniCosechadorInput)
@@ -2233,10 +2234,11 @@ formLecturaTicket.addEventListener('submit', async (event) => {
       sesionLectura.sesion_id,
       ticket.cosechador_dni
     )
-    resultadoLectura.textContent = `✓ +1 jaba — ${ticket.cosechador}`
+    const nombreTicket = nombreCosechadorVisible(ticket.cosechador, ticket.cosechador_dni)
+    resultadoLectura.textContent = `✓ +1 jaba — ${nombreTicket}`
     resultadoLectura.className = 'resultado exito'
     totalSesion.textContent = total
-    mostrarContadorCosechador(ticket.cosechador, totalPersona, {
+    mostrarContadorCosechador(nombreTicket, totalPersona, {
       etiquetaCosechador,
       totalCosechador
     })

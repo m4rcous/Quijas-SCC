@@ -12,6 +12,10 @@ function normalizarTextoObligatorioScc_(valor, mensaje) {
   return texto;
 }
 
+function normalizarTextoListadoScc_(valor) {
+  return String(valor == null ? '' : valor).trim();
+}
+
 function normalizarActivoScc_(valor) {
   if (valor === true || valor === false) return valor;
   var texto = String(valor == null ? '' : valor)
@@ -48,14 +52,8 @@ function normalizarTrabajadorListadoScc_(trabajador) {
   return {
     id: normalizarIdSistemaScc_(trabajador.id),
     dni: normalizarDniScc_(trabajador.dni),
-    nombres: normalizarTextoObligatorioScc_(
-      trabajador.nombres,
-      'Los nombres son obligatorios'
-    ),
-    apellidos: normalizarTextoObligatorioScc_(
-      trabajador.apellidos,
-      'Los apellidos son obligatorios'
-    ),
+    nombres: normalizarTextoListadoScc_(trabajador.nombres),
+    apellidos: normalizarTextoListadoScc_(trabajador.apellidos),
     activo: normalizarActivoScc_(trabajador.activo)
   };
 }

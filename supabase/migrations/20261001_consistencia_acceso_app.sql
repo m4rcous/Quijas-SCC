@@ -64,7 +64,7 @@ declare
   v_trabajador_id uuid;
 begin
   if p_campania_id is null then
-    raise exception U&'La campa\00F1a es obligatoria para recalcular accesos';
+    raise exception 'La campaña es obligatoria para recalcular accesos';
   end if;
 
   if not exists (
@@ -72,7 +72,7 @@ begin
     from public.campanias c
     where c.id = p_campania_id
   ) then
-    raise exception U&'La campa\00F1a indicada no existe';
+    raise exception 'La campaña indicada no existe';
   end if;
 
   for v_trabajador_id in
@@ -118,7 +118,7 @@ begin
     raise exception 'El trabajador es obligatorio';
   end if;
   if p_campania_id is null then
-    raise exception U&'La campa\00F1a es obligatoria';
+    raise exception 'La campaña es obligatoria';
   end if;
   if p_rol is null then
     raise exception 'El rol es obligatorio';
@@ -138,7 +138,7 @@ begin
   from public.campanias c
   where c.id = p_campania_id;
   if not found then
-    raise exception U&'La campa\00F1a seleccionada no existe';
+    raise exception 'La campaña seleccionada no existe';
   end if;
 
   if p_rol_id is not null then
@@ -147,7 +147,7 @@ begin
     where tcr.id = p_rol_id;
 
     if not found then
-      raise exception U&'El rol de campa\00F1a indicado no existe';
+      raise exception 'El rol de campaña indicado no existe';
     end if;
 
     v_trabajador_id_anterior := v_rol.trabajador_id;
@@ -174,10 +174,10 @@ begin
 
   if v_es_nuevo or v_reactivacion or v_cambio_identidad then
     if v_campania.estado::text <> 'ACTIVA' then
-      raise exception U&'La campa\00F1a seleccionada no est\00E1 activa';
+      raise exception 'La campaña seleccionada no está activa';
     end if;
     if v_trabajador.activo is not true then
-      raise exception U&'El trabajador seleccionado no est\00E1 activo';
+      raise exception 'El trabajador seleccionado no está activo';
     end if;
   end if;
 
@@ -199,7 +199,7 @@ begin
       returning * into v_rol;
     exception
       when unique_violation then
-        raise exception U&'El trabajador ya tiene ese rol en la campa\00F1a seleccionada';
+        raise exception 'El trabajador ya tiene ese rol en la campaña seleccionada';
     end;
     v_accion := 'CREADO';
   else
@@ -213,7 +213,7 @@ begin
       returning * into v_rol;
     exception
       when unique_violation then
-        raise exception U&'El trabajador ya tiene ese rol en la campa\00F1a seleccionada';
+        raise exception 'El trabajador ya tiene ese rol en la campaña seleccionada';
     end;
     v_accion := 'ACTUALIZADO';
   end if;

@@ -74,7 +74,7 @@ export async function obtenerOperador(dni) {
 export async function guardarCache(cache) {
   const db = await dbPromise
 
-  const tx = db.transaction(['meta', 'trabajadores', 'lotes', 'tickets'], 'readwrite')
+  const tx = db.transaction(['meta', 'trabajadores', 'lotes', 'tickets', 'cola'], 'readwrite')
 
   await tx.objectStore('meta').put(cache.campania, 'campania_activa')
 
@@ -96,6 +96,22 @@ export async function guardarCache(cache) {
   const rolesLocales = trabajadoresLocales.filter((trabajador) =>
     ['PENDIENTE', 'ERROR', 'SINCRONIZADO'].includes(trabajador.estado_sync_jabero)
   )
+  const operacionesLocales = await tx.objectStore('cola').getAll()
+  const dnisCosechadoresPendientes = new Set(
+    operacionesLocales
+      .filter(
+        (operacion) =>
+          operacion.tipo === 'ASIGNAR_TICKET' &&
+          ['PENDIENTE', 'ERROR'].includes(operacion.estado) &&
+          operacion.payload?.dniCosechador
+      )
+      .map((operacion) => operacion.payload.dniCosechador)
+  )
+  const cosechadoresProvisionales = trabajadoresLocales.filter(
+    (trabajador) =>
+      dnisCosechadoresPendientes.has(trabajador.dni) &&
+      trabajador.roles?.includes('COSECHADOR')
+  )
 
   await trabajadoresStore.clear()
   await lotesStore.clear()
@@ -103,6 +119,25 @@ export async function guardarCache(cache) {
 
   for (const trabajador of cache.trabajadores) {
     await trabajadoresStore.put(trabajador)
+  }
+  for (const local of cosechadoresProvisionales) {
+    const actual = await trabajadoresStore.get(local.dni)
+    if (!actual) {
+      await trabajadoresStore.put(local)
+      continue
+    }
+
+    actual.roles = [...new Set([...(actual.roles ?? []), 'COSECHADOR'])]
+    if (!String(actual.nombre ?? '').trim()) {
+      actual.nombre =
+        String(local.nombre ?? '').trim() || `DNI ${String(local.dni ?? '').trim()}`
+    }
+    if (!String(actual.nombre ?? '').startsWith('DNI ')) {
+      delete actual.provisional_local
+    } else if (local.provisional_local) {
+      actual.provisional_local = true
+    }
+    await trabajadoresStore.put(actual)
   }
   for (const local of rolesLocales) {
     const actual = await trabajadoresStore.get(local.dni)
@@ -438,10 +473,27 @@ export async function guardarAsignacionOffline({
   fechaAsignacion = new Date().toISOString()
 }) {
   const db = await dbPromise
-  const tx = db.transaction(['meta', 'cola', 'tickets'], 'readwrite')
+  const tx = db.transaction(['meta', 'cola', 'tickets', 'trabajadores'], 'readwrite')
   if (await tx.objectStore('tickets').get(codigoTicket)) {
     throw new Error('El ticket ya fue asignado.')
   }
+  const trabajadoresStore = tx.objectStore('trabajadores')
+  const trabajadorActual = await trabajadoresStore.get(cosechadorDni)
+  const yaEraCosechador = trabajadorActual?.roles?.includes('COSECHADOR') === true
+  const nombreVisible =
+    String(cosechador ?? '').trim() || `DNI ${String(cosechadorDni ?? '').trim()}`
+
+  await trabajadoresStore.put({
+    ...(trabajadorActual ?? {}),
+    dni: cosechadorDni,
+    nombre: String(trabajadorActual?.nombre ?? '').trim() || nombreVisible,
+    roles: [...new Set([...(trabajadorActual?.roles ?? []), 'COSECHADOR'])],
+    activo: trabajadorActual?.activo ?? true,
+    provisional_local: yaEraCosechador
+      ? trabajadorActual?.provisional_local === true
+      : true
+  })
+
   const operacion = await crearOperacionEnTx(tx, 'ASIGNAR_TICKET', {
     dniOperador,
     dniCosechador: cosechadorDni,
