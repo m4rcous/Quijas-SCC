@@ -32,6 +32,7 @@ import {
 import { sincronizarPendientes } from './offline/sync'
 import { evaluarDescarteOperacion } from './offline/cola'
 import { configurarTecladoManual } from './modules/tecladoManual'
+import { configurarEnvioScanner, esDniValido } from './modules/scanner'
 import {
   mostrarContadorCosechador,
   mostrarSesionLecturaEnVista
@@ -1594,11 +1595,9 @@ setInterval(() => {
 
 // LOGIN
 
-formLogin.addEventListener('submit', async (event) => {
-  event.preventDefault()
+configurarEnvioScanner(formLogin, dniOperadorInput, async (dni) => {
   limpiarMensajeLogin()
-  const dni = dniOperadorInput.value.trim()
-  if (!/^\d{8}$/.test(dni)) {
+  if (!esDniValido(dni)) {
     mostrarErrorLogin('El DNI debe contener 8 dígitos.')
     dniOperadorInput.select()
     return
@@ -1800,11 +1799,9 @@ btnVolverMenuJaberos.addEventListener('click', () => {
 
 // VALIDAR COSECHADOR
 
-formCosechador.addEventListener('submit', async (event) => {
-  event.preventDefault()
+configurarEnvioScanner(formCosechador, dniCosechadorInput, async (dni) => {
   limpiarResultado()
-  const dni = dniCosechadorInput.value.trim()
-  if (!/^\d{8}$/.test(dni)) {
+  if (!esDniValido(dni)) {
     mostrarResultado('El DNI debe contener 8 dígitos.', 'error')
     dniCosechadorInput.select()
     return
@@ -1826,13 +1823,11 @@ formCosechador.addEventListener('submit', async (event) => {
 
 // ASIGNAR TICKET
 
-formTicket.addEventListener('submit', async (event) => {
-  event.preventDefault()
+configurarEnvioScanner(formTicket, codigoTicketInput, async (codigoTicket) => {
   limpiarResultado()
   if (!operador || !cosechador) {
     return
   }
-  const codigoTicket = codigoTicketInput.value.trim()
   if (!codigoTicket) {
     mostrarResultado('Escanee un ticket.', 'error')
     codigoTicketInput.focus()
@@ -1885,11 +1880,9 @@ formTicket.addEventListener('submit', async (event) => {
 
 // REGISTRO DE JABEROS
 
-formJabero.addEventListener('submit', async (event) => {
-  event.preventDefault()
+configurarEnvioScanner(formJabero, dniJaberoInput, async (dni, liberar) => {
   limpiarResultadoJabero()
-  const dni = dniJaberoInput.value.trim()
-  if (!/^\d{8}$/.test(dni)) {
+  if (!esDniValido(dni)) {
     mostrarResultadoJabero('El DNI debe contener 8 dígitos.', 'error')
     dniJaberoInput.select()
     return
@@ -1920,6 +1913,7 @@ formJabero.addEventListener('submit', async (event) => {
     return
   }
 
+  liberar()
   if (navigator.onLine) {
     try {
       await sincronizarPendientes()
@@ -2107,15 +2101,13 @@ async function cargarLotes() {
   }
 }
 
-formIniciarLectura.addEventListener('submit', async (event) => {
-  event.preventDefault()
+configurarEnvioScanner(formIniciarLectura, dniJaberoLectura, async (dni) => {
   const loteId = loteLectura.value
-  const dni = dniJaberoLectura.value.trim()
   if (!loteId) {
     mostrarMensajeLectura('Seleccione un lote.', 'error')
     return
   }
-  if (!/^\d{8}$/.test(dni)) {
+  if (!esDniValido(dni)) {
     mostrarMensajeLectura('El DNI debe contener 8 dígitos.', 'error')
     dniJaberoLectura.select()
     return
@@ -2178,12 +2170,10 @@ formIniciarLectura.addEventListener('submit', async (event) => {
   await actualizarEstadoConexion()
 })
 
-formLecturaTicket.addEventListener('submit', async (event) => {
-  event.preventDefault()
+configurarEnvioScanner(formLecturaTicket, ticketLectura, async (codigo, liberar) => {
   if (!sesionLectura) {
     return
   }
-  const codigo = ticketLectura.value.trim()
   if (!codigo) {
     return
   }
@@ -2254,6 +2244,7 @@ formLecturaTicket.addEventListener('submit', async (event) => {
     return
   }
 
+  liberar()
   if (navigator.onLine) {
     try {
       await sincronizarPendientes()
