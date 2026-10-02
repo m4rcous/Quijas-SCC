@@ -175,6 +175,87 @@ test('ranking vacío es un estado válido', () => {
   assert.deepEqual(Array.from(resultado.ranking), [])
 })
 
+function respuestaRankingProvisional() {
+  return {
+    ok: true,
+    campania: 'Arándanos 2026',
+    ranking: [
+      { posicion: 1, cosechador_dni: '71234567', cosechador: ' Ana Pérez ', total_jabas: 50, ultima_lectura: '2026-09-30T15:42:00Z' },
+      ...['', '   ', null, undefined].map((nombre, indice) => ({
+        posicion: 2,
+        cosechador_dni: `0123456${indice}`,
+        cosechador: nombre,
+        total_jabas: 20,
+        ultima_lectura: '2026-09-30T15:40:00Z'
+      }))
+    ]
+  }
+}
+
+test('ranking mixto acepta provisionales sin nombre sin perder posiciones ni jabas', () => {
+  const respuesta = respuestaRankingProvisional()
+  const resultado = normalizarRankingReporteScc_(respuesta)
+  assert.equal(resultado.ranking.length, respuesta.ranking.length)
+  resultado.ranking.forEach((fila, indice) => {
+    const original = respuesta.ranking[indice]
+    assert.equal(fila.posicion, original.posicion)
+    assert.equal(fila.cosechadorDni, original.cosechador_dni)
+    assert.equal(fila.totalJabas, original.total_jabas)
+    assert.equal(fila.ultimaLectura, original.ultima_lectura)
+    assert.equal(fila.cosechador, indice === 0 ? 'Ana Pérez' : 'ASIGNAR NOMBRE')
+    assert.equal(original.cosechador, indice === 0 ? ' Ana Pérez ' : ['', '   ', null, undefined][indice - 1])
+  })
+})
+
+test('ranking provisional continúa validando DNI, posición, jabas y última lectura', () => {
+  const invalidos = [
+    { cosechador_dni: '' },
+    { posicion: -1 },
+    { total_jabas: 'incorrecto' },
+    { ultima_lectura: 'incorrecto' }
+  ]
+  invalidos.forEach((cambios) => {
+    const respuesta = respuestaRankingProvisional()
+    Object.assign(respuesta.ranking[1], cambios)
+    assert.throws(() => normalizarRankingReporteScc_(respuesta), /Respuesta inválida/)
+  })
+})
+
+test('actualizar ranking escribe también provisionales y luego recupera el nombre oficial', () => {
+  const escrituras = []
+  const hoja = {
+    getFilter: () => null,
+    getDataRange: () => ({ clearContent() { escrituras.length = 0 } }),
+    getRange: (...rango) => ({
+      setValues(valores) { escrituras.push({ rango, valores }); return this },
+      setValue(valor) { assert.fail(`No debe mostrar ${valor}`) },
+      setFontWeight() { return this },
+      setNumberFormat() { return this },
+      createFilter() { return this }
+    })
+  }
+  const contextoEscritura = vm.createContext({ Date, SCC_CONFIG: { hojaRanking: 'RANKING' } })
+  vm.runInContext(pureSource + '\n' + reportesSource, contextoEscritura)
+  contextoEscritura.configurarHojaTablaReporte_ = () => hoja
+  const respuesta = respuestaRankingProvisional()
+  const actualizar = () => contextoEscritura.ejecutarActualizacionReportesScc_([{
+    nombre: 'RANKING',
+    consultar: () => respuesta,
+    normalizar: contextoEscritura.normalizarRankingReporteScc_,
+    escribir: contextoEscritura.escribirRankingReporte_
+  }])
+  assert.equal(actualizar()[0].ok, true)
+  const filas = escrituras[1].valores
+  assert.equal(filas.length, 5)
+  assert.equal(filas[0][2], 'Ana Pérez')
+  assert.deepEqual(Array.from(filas[1]).slice(0, 4), [2, '01234560', 'ASIGNAR NOMBRE', 20])
+  assert.equal(filas[1][4].toISOString(), '2026-09-30T15:40:00.000Z')
+  respuesta.ranking[1].cosechador = 'Fausto Rodríguez'
+  assert.equal(actualizar()[0].ok, true)
+  assert.equal(escrituras[1].valores[1][2], 'Fausto Rodríguez')
+  assert.equal(escrituras[1].valores[1][3], 20)
+})
+
 test('producción diaria se normaliza sin reordenar filas', () => {
   const resultado = normalizarProduccionDiariaReporteScc_({
     ok: true,

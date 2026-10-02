@@ -33,6 +33,7 @@ import { sincronizarPendientes } from './offline/sync'
 import { evaluarDescarteOperacion } from './offline/cola'
 import { configurarTecladoManual } from './modules/tecladoManual'
 import { configurarEnvioScanner, esDniValido } from './modules/scanner'
+import { configurarConfirmacion } from './modules/confirmacion'
 import {
   mostrarContadorCosechador,
   mostrarEstadoLecturaTicket,
@@ -224,6 +225,10 @@ const etiquetaCosechador = document.querySelector('#etiqueta-cosechador')
 const totalCosechador = document.querySelector('#total-cosechador')
 const btnFinalizarLectura = document.querySelector('#btn-finalizar-lectura')
 const mensajeModuloLectura = document.querySelector('#mensaje-modulo-lectura')
+const confirmarFinalizarLectura = configurarConfirmacion({
+  dialogo: document.querySelector('#confirmacion-lectura'),
+  mensaje: document.querySelector('#confirmacion-lectura-mensaje')
+})
 
 // NAVEGACIÓN CONTEXTUAL Y VISTAS DE CONSULTA
 
@@ -1732,7 +1737,7 @@ async function mostrarSesionesActivas() {
     finalizar.className = 'btn-secondary'
     finalizar.textContent = 'Finalizar sesión'
     finalizar.addEventListener('click', async () => {
-      if (!window.confirm('¿Finalizar la sesión de lectura?')) return
+      if (!(await confirmarFinalizarLectura('¿Finalizar la sesión de lectura?'))) return
       sesionLectura = sesion
       await finalizarSesionLectura()
     })
@@ -2227,7 +2232,7 @@ btnFinalizarLectura.addEventListener('click', async () => {
   if (!sesionLectura) {
     return
   }
-  const confirmar = window.confirm('¿Finalizar la sesión de lectura?')
+  const confirmar = await confirmarFinalizarLectura('¿Finalizar la sesión de lectura?')
   if (!confirmar) {
     return
   }
@@ -2243,7 +2248,7 @@ btnVolverMenuLectura.addEventListener('click', async () => {
     mostrarMenu()
     return
   }
-  const confirmar = window.confirm(
+  const confirmar = await confirmarFinalizarLectura(
     'Hay una sesión activa. ¿Desea finalizarla y volver al menú?'
   )
   if (!confirmar) {

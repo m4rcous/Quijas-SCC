@@ -120,7 +120,7 @@ function normalizarRankingReporteScc_(respuesta) {
       return {
         posicion: normalizarEnteroReporteScc_(fila.posicion, 'posición'),
         cosechadorDni: normalizarTextoReporteScc_(fila.cosechador_dni, 'cosechador_dni'),
-        cosechador: normalizarTextoReporteScc_(fila.cosechador, 'cosechador'),
+        cosechador: String(fila.cosechador == null ? '' : fila.cosechador).trim() || 'ASIGNAR NOMBRE',
         totalJabas: normalizarEnteroReporteScc_(fila.total_jabas, 'total_jabas'),
         ultimaLectura: normalizarTimestampReporteScc_(fila.ultima_lectura, 'ultima_lectura')
       };

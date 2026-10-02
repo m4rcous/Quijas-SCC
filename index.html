@@ -914,6 +914,25 @@
         <div id="context-options" class="bottom-sheet__options"></div>
       </section>
     </div>
+    <dialog
+      id="confirmacion-lectura"
+      class="confirmacion"
+      aria-labelledby="confirmacion-lectura-titulo"
+      aria-describedby="confirmacion-lectura-mensaje"
+    >
+      <form method="dialog">
+        <h2 id="confirmacion-lectura-titulo">Finalizar lectura</h2>
+        <p id="confirmacion-lectura-mensaje"></p>
+        <div class="confirmacion__acciones">
+          <button type="submit" class="btn-secondary" value="cancelar" autofocus>
+            Cancelar
+          </button>
+          <button type="submit" class="btn-primary" value="confirmar">
+            Finalizar sesión
+          </button>
+        </div>
+      </form>
+    </dialog>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

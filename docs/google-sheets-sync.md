@@ -227,6 +227,8 @@ Presenta una vista administrativa simple con campaña, fecha de inicio, total de
 
 Columnas: Posición, DNI, Cosechador, Jabas y Última lectura. El orden y la posición vienen del backend; Apps Script no recalcula el ranking y conserva empates producidos por `DENSE_RANK`. Sin producción se conserva el encabezado y se muestra una fila informativa.
 
+Los cosechadores provisionales sin nombre aparecen como `ASIGNAR NOMBRE`, conservando DNI, posición, jabas y última lectura. Este texto solo se muestra en el reporte; no se guarda como nombre del trabajador ni impide actualizar el ranking completo.
+
 ### PRODUCCION_DIARIA
 
 Columnas: Fecha, Jabas, Cosechadores y Sesiones. El backend entrega los días de producción del más reciente al más antiguo. Si no hay producción se conserva únicamente el encabezado.
