@@ -45,7 +45,7 @@ function protegerColumnasTecnicasLotes_(hoja) {
 }
 
 function leerFilasLotes_(hoja) {
-  var ultimaFila = hoja.getLastRow();
+  var ultimaFila = obtenerUltimaFilaAdministrativaScc_(hoja, [1, 2, 3, 4, 5]);
   if (ultimaFila <= SCC_CONFIG.filaEncabezado) return [];
   return hoja.getRange(2, 1, ultimaFila - 1, 9).getValues().map(function (valores, indice) {
     return {
@@ -104,7 +104,7 @@ function refrescarValidacionesLotes_() {
 function sincronizarLotes_() {
   var hoja = configurarHojaLotes_();
   var filas = leerFilasLotes_(hoja);
-  var pendientes = filas.filter(function (fila) { return esFilaPendienteScc_(fila.estadoSync); });
+  var pendientes = filtrarFilasPendientesConDatosScc_(filas);
   if (!pendientes.length) return { procesadas: 0, sincronizados: 0, errores: 0 };
 
   var libro = SpreadsheetApp.getActiveSpreadsheet();

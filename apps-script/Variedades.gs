@@ -41,7 +41,7 @@ function protegerColumnasTecnicasVariedades_(hoja) {
 }
 
 function leerFilasVariedades_(hoja) {
-  var ultimaFila = hoja.getLastRow();
+  var ultimaFila = obtenerUltimaFilaAdministrativaScc_(hoja, [1, 2]);
   if (ultimaFila <= SCC_CONFIG.filaEncabezado) return [];
   return hoja.getRange(2, 1, ultimaFila - 1, 6).getValues().map(function (valores, indice) {
     return {
@@ -59,7 +59,7 @@ function leerFilasVariedades_(hoja) {
 function sincronizarVariedades_() {
   var hoja = configurarHojaVariedades_();
   var filas = leerFilasVariedades_(hoja);
-  var pendientes = filas.filter(function (fila) { return esFilaPendienteScc_(fila.estadoSync); });
+  var pendientes = filtrarFilasPendientesConDatosScc_(filas);
   if (!pendientes.length) return { procesadas: 0, sincronizados: 0, errores: 0 };
 
   var resultados = procesarFilasPendientesVariedadesScc_(

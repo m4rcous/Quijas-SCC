@@ -17,7 +17,7 @@ function nombreVisibleTrabajadorRolCampaniaScc_(trabajador) {
   return [trabajador && trabajador.nombres, trabajador && trabajador.apellidos]
     .map(function (valor) { return String(valor == null ? '' : valor).trim(); })
     .filter(Boolean)
-    .join(' ');
+    .join(' ') || 'ASIGNAR NOMBRE';
 }
 
 function debeMarcarPendienteRolesCampaniaOnEditScc_(
@@ -155,10 +155,7 @@ function normalizarRolCampaniaListadoScc_(item) {
     id: id,
     trabajadorId: trabajadorId,
     dni: normalizarDniScc_(item.dni),
-    trabajador: normalizarTextoObligatorioScc_(
-      item.trabajador,
-      'Respuesta inv\u00e1lida al listar roles de campa\u00f1a'
-    ),
+    trabajador: normalizarTextoListadoScc_(item.trabajador) || 'ASIGNAR NOMBRE',
     campaniaId: campaniaId,
     campaniaCodigo: normalizarTextoObligatorioScc_(
       item.campania_codigo,
@@ -216,7 +213,9 @@ function procesarFilasPendientesRolesCampaniaScc_(
 ) {
   var obtenerAhora = ahora || function () { return new Date(); };
   return filas.map(function (fila) {
-    if (!esFilaPendienteScc_(fila.estadoSync)) return Object.assign({}, fila);
+    if (!esFilaPendienteScc_(fila.estadoSync) || esFilaAdministrativaVaciaScc_(fila)) {
+      return Object.assign({}, fila);
+    }
 
     var idAnterior = fila.idSistema;
     try {

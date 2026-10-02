@@ -72,9 +72,42 @@ export async function obtenerOperador(dni) {
 // ============================================================
 
 export async function guardarCache(cache) {
+  if (
+    !cache ||
+    !Array.isArray(cache.trabajadores) ||
+    !Array.isArray(cache.lotes) ||
+    !Array.isArray(cache.tickets)
+  ) {
+    throw new Error('El servidor devolvió una caché operativa inválida.')
+  }
   const db = await dbPromise
 
-  const tx = db.transaction(['meta', 'trabajadores', 'lotes', 'tickets', 'cola'], 'readwrite')
+  const tx = db.transaction(
+    ['meta', 'trabajadores', 'lotes', 'tickets', 'cola'],
+    'readwrite'
+  )
+
+  try {
+    await reemplazarCacheEnTx(tx, cache)
+    await tx.done
+  } catch (error) {
+    try {
+      tx.abort()
+    } catch {
+      // IndexedDB puede haber abortado ya la transacción por un error de escritura.
+    }
+    await tx.done.catch(() => {})
+    throw error
+  }
+}
+
+async function reemplazarCacheEnTx(tx, cache) {
+  // Solo un nombre oficial de esta respuesta reemplaza nombres en tickets locales.
+  const nombresServidor = new Map(
+    cache.trabajadores
+      .map((trabajador) => [trabajador.dni, String(trabajador.nombre ?? '').trim()])
+      .filter(([, nombre]) => nombre && !/^DNI \d{8}$/.test(nombre))
+  )
 
   await tx.objectStore('meta').put(cache.campania, 'campania_activa')
 
@@ -140,18 +173,16 @@ export async function guardarCache(cache) {
     await trabajadoresStore.put(actual)
   }
   for (const local of rolesLocales) {
-    const actual = await trabajadoresStore.get(local.dni)
-    if (actual) {
-      if (local.estado_sync_jabero === 'SINCRONIZADO') continue
-      if (local.estado_sync_jabero === 'PENDIENTE') {
-        actual.roles = [...new Set([...(actual.roles ?? []), 'JABERO'])]
-      } else {
-        actual.roles = (actual.roles ?? []).filter((rol) => rol !== 'JABERO')
-      }
-      actual.estado_sync_jabero = local.estado_sync_jabero
-      actual.operacion_jabero_id = local.operacion_jabero_id
-      await trabajadoresStore.put(actual)
+    if (local.estado_sync_jabero === 'SINCRONIZADO') continue
+    const actual = (await trabajadoresStore.get(local.dni)) ?? { ...local }
+    if (local.estado_sync_jabero === 'PENDIENTE') {
+      actual.roles = [...new Set([...(actual.roles ?? []), 'JABERO'])]
+    } else {
+      actual.roles = (actual.roles ?? []).filter((rol) => rol !== 'JABERO')
     }
+    actual.estado_sync_jabero = local.estado_sync_jabero
+    actual.operacion_jabero_id = local.operacion_jabero_id
+    await trabajadoresStore.put(actual)
   }
 
   for (const lote of cache.lotes) {
@@ -160,8 +191,10 @@ export async function guardarCache(cache) {
 
   for (const ticket of cache.tickets) {
     const ticketLocal = ticketsLocalesPorCodigo.get(ticket.codigo_ticket)
+    const nombreServidor = nombresServidor.get(ticket.cosechador_dni)
     await ticketsStore.put({
       ...ticket,
+      ...(nombreServidor ? { cosechador: nombreServidor } : {}),
       fecha_asignacion:
         ticket.fecha_asignacion ?? ticketLocal?.fecha_asignacion ?? null,
       estado_sync: 'SINCRONIZADO'
@@ -169,10 +202,12 @@ export async function guardarCache(cache) {
   }
 
   for (const ticket of ticketsPendientes) {
-    await ticketsStore.put(ticket)
+    const nombreServidor = nombresServidor.get(ticket.cosechador_dni)
+    await ticketsStore.put({
+      ...ticket,
+      ...(nombreServidor ? { cosechador: nombreServidor } : {})
+    })
   }
-
-  await tx.done
 }
 
 // ============================================================
@@ -513,17 +548,34 @@ export async function guardarAsignacionOffline({
 }
 
 export async function registrarJaberoOffline(dniOperador, dniTrabajador) {
+  dniTrabajador = String(dniTrabajador ?? '').trim()
+  if (!/^\d{8}$/.test(dniTrabajador)) {
+    throw new Error('El DNI debe contener 8 dígitos.')
+  }
   const db = await dbPromise
   const tx = db.transaction(['meta', 'cola', 'trabajadores'], 'readwrite')
-  const trabajador = await tx.objectStore('trabajadores').get(dniTrabajador)
-  if (
-    !trabajador ||
-    trabajador.roles?.includes('JABERO') ||
-    trabajador.estado_sync_jabero === 'ERROR'
-  ) {
+  const campania = await tx.objectStore('meta').get('campania_activa')
+  const trabajadorActual = await tx.objectStore('trabajadores').get(dniTrabajador)
+  if (!campania || (campania.estado && campania.estado !== 'ACTIVA')) {
+    throw new Error('No hay una campaña activa en los datos locales.')
+  }
+  if (trabajadorActual?.activo === false) {
+    throw new Error('El trabajador está inactivo.')
+  }
+  if (trabajadorActual?.estado_sync_jabero === 'ERROR') {
     throw new Error(
       'El jabero no está disponible para registrar. Revise su estado de sincronización.'
     )
+  }
+  if (trabajadorActual?.roles?.includes('JABERO')) {
+    throw new Error('El trabajador ya está registrado como jabero.')
+  }
+  const trabajador = trabajadorActual ?? {
+    dni: dniTrabajador,
+    nombre: `DNI ${dniTrabajador}`,
+    activo: true,
+    roles: [],
+    provisional_local: true
   }
   const operacion = await crearOperacionEnTx(tx, 'REGISTRAR_JABERO', {
     dniOperador,

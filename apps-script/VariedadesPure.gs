@@ -49,7 +49,9 @@ function normalizarListadoVariedadesScc_(respuesta) {
 function procesarFilasPendientesVariedadesScc_(filas, guardar, ahora) {
   var obtenerAhora = ahora || function () { return new Date(); };
   return filas.map(function (fila) {
-    if (!esFilaPendienteScc_(fila.estadoSync)) return Object.assign({}, fila);
+    if (!esFilaPendienteScc_(fila.estadoSync) || esFilaAdministrativaVaciaScc_(fila)) {
+      return Object.assign({}, fila);
+    }
 
     var idAnterior = fila.idSistema;
     try {

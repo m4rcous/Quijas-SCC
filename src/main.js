@@ -38,13 +38,11 @@ import {
   mostrarSesionLecturaEnVista
 } from './modules/vistaSesionLectura'
 import {
-  FILTROS_ASIGNADOS_HOY,
   filtrarAsignacionesHoy,
   formatearHoraAsignacion,
   obtenerBadgeEstadoAsignacion
 } from './modules/asignadosHoy'
 import {
-  FILTROS_JABEROS_CAMPANIA,
   filtrarJaberosCampania,
   obtenerBadgeEstadoJabero
 } from './modules/jaberosCampania'
@@ -241,6 +239,9 @@ const consultaTablaBody = document.querySelector('#consulta-tabla-body')
 const consultaEmpty = document.querySelector('#consulta-empty')
 const consultaEmptyAccion = document.querySelector('#consulta-empty-accion')
 const consultaContador = document.querySelector('#consulta-contador')
+const consultaIntroduccion = document.querySelector('#consulta-introduccion')
+const btnActualizarConsulta = document.querySelector('#btn-actualizar-consulta')
+const consultaFeedback = document.querySelector('#consulta-feedback')
 
 const consultasContextuales = {
   asignacion: {
@@ -252,9 +253,7 @@ const consultasContextuales = {
         id: 'asignados-hoy',
         etiqueta: 'Asignados hoy',
         titulo: 'Asignados hoy',
-        descripcion: 'Tickets asignados durante la jornada.',
         columnas: ['Cosechador', 'Ticket', 'Hora'],
-        chips: ['Todos', 'Sincronizados', 'Pendientes', 'Con error'],
         vacio: 'No hay tickets asignados hoy.'
       },
       {
@@ -276,9 +275,7 @@ const consultasContextuales = {
         id: 'jaberos-campania',
         etiqueta: 'Jaberos de campaña',
         titulo: 'Jaberos de campaña',
-        descripcion: 'Personal registrado como jabero en la campaña actual.',
         columnas: ['Jabero', 'DNI', 'Estado'],
-        chips: ['Todos', 'Pendientes', 'Error'],
         vacio: 'No hay jaberos registrados en esta campaña.'
       },
       {
@@ -323,9 +320,7 @@ const consultasContextuales = {
 let vistaOperativaConsulta = vistaMenu
 let consultaActual = null
 let ticketsConsultaActual = []
-let filtroAsignadosHoy = FILTROS_ASIGNADOS_HOY.TODOS
 let trabajadoresConsultaActual = []
-let filtroJaberosCampania = FILTROS_JABEROS_CAMPANIA.TODOS
 let cosechadoresJabasActual = []
 let ordenCosechadoresJabas = ORDEN_COSECHADORES_JABAS.MAS_JABAS
 let sesionesConsultaActual = []
@@ -439,7 +434,12 @@ async function mostrarConsulta(configuracion) {
   consultaActual = configuracion
   tituloConsultaHeader.textContent = configuracion.titulo
   tituloConsulta.textContent = configuracion.titulo
-  descripcionConsulta.textContent = configuracion.descripcion
+  descripcionConsulta.textContent = configuracion.descripcion ?? ''
+  const actualizable = ['asignados-hoy', 'jaberos-campania'].includes(configuracion.id)
+  consultaIntroduccion.classList.toggle('oculto', actualizable)
+  btnActualizarConsulta.classList.toggle('oculto', !actualizable)
+  consultaFeedback.textContent = ''
+  consultaFeedback.classList.add('oculto')
   consultaBusqueda.value = ''
   consultaBusqueda.disabled = false
   consultaContador.classList.add('oculto')
@@ -516,35 +516,9 @@ async function mostrarConsulta(configuracion) {
 
 async function prepararConsultaAsignadosHoy() {
   consultaBusqueda.placeholder = 'Buscar DNI, nombre o ticket...'
-  filtroAsignadosHoy = FILTROS_ASIGNADOS_HOY.TODOS
   ticketsConsultaActual = await obtenerTickets()
-
-  const filtros = [
-    ['Todos', FILTROS_ASIGNADOS_HOY.TODOS],
-    ['Sincronizados', FILTROS_ASIGNADOS_HOY.SINCRONIZADO],
-    ['Pendientes', FILTROS_ASIGNADOS_HOY.PENDIENTE],
-    ['Con error', FILTROS_ASIGNADOS_HOY.ERROR]
-  ]
-
   consultaChips.replaceChildren()
-  filtros.forEach(([etiqueta, valor], indice) => {
-    const boton = document.createElement('button')
-    boton.type = 'button'
-    boton.className = `filter-chip${indice === 0 ? ' selected' : ''}`
-    boton.textContent = etiqueta
-    boton.dataset.filtro = valor
-    boton.setAttribute('aria-pressed', String(indice === 0))
-    boton.addEventListener('click', () => {
-      filtroAsignadosHoy = valor
-      consultaChips.querySelectorAll('.filter-chip').forEach((item) => {
-        const seleccionado = item === boton
-        item.classList.toggle('selected', seleccionado)
-        item.setAttribute('aria-pressed', String(seleccionado))
-      })
-      renderAsignadosHoy()
-    })
-    consultaChips.append(boton)
-  })
+  consultaChips.classList.add('oculto')
 
   consultaTablaHead.replaceChildren()
   for (const columna of ['Cosechador', 'Ticket', 'Hora']) {
@@ -561,8 +535,7 @@ async function prepararConsultaAsignadosHoy() {
 function renderAsignadosHoy() {
   const asignacionesDelDia = filtrarAsignacionesHoy(ticketsConsultaActual)
   const asignaciones = filtrarAsignacionesHoy(ticketsConsultaActual, {
-    busqueda: consultaBusqueda.value,
-    filtro: filtroAsignadosHoy
+    busqueda: consultaBusqueda.value
   })
 
   consultaTablaBody.replaceChildren()
@@ -573,7 +546,10 @@ function renderAsignadosHoy() {
     const cosechadorCell = document.createElement('td')
     cosechadorCell.className = 'industrial-table__person'
     const nombre = document.createElement('strong')
-    nombre.textContent = nombreCosechadorVisible(ticket.cosechador, ticket.cosechador_dni)
+    nombre.textContent = nombreCosechadorVisible(
+      ticket.cosechador,
+      ticket.cosechador_dni
+    )
     const dni = document.createElement('span')
     dni.textContent = ticket.cosechador_dni || 'DNI no disponible'
     cosechadorCell.append(nombre, dni)
@@ -614,41 +590,16 @@ function renderAsignadosHoy() {
     ? 'No se encontraron asignaciones.'
     : 'No hay tickets asignados hoy.'
   consultaEmpty.querySelector('p').textContent = sinResultados
-    ? 'Pruebe otra búsqueda o cambie el filtro.'
+    ? 'Pruebe otra búsqueda.'
     : 'Las nuevas asignaciones aparecerán aquí, incluso si se crean sin conexión.'
   consultaEmpty.classList.remove('oculto')
 }
 
 async function prepararConsultaJaberosCampania() {
   consultaBusqueda.placeholder = 'Buscar nombre o DNI...'
-  filtroJaberosCampania = FILTROS_JABEROS_CAMPANIA.TODOS
   trabajadoresConsultaActual = await obtenerTrabajadores()
-
-  const filtros = [
-    ['Todos', FILTROS_JABEROS_CAMPANIA.TODOS],
-    ['Pendientes', FILTROS_JABEROS_CAMPANIA.PENDIENTE],
-    ['Error', FILTROS_JABEROS_CAMPANIA.ERROR]
-  ]
-
   consultaChips.replaceChildren()
-  filtros.forEach(([etiqueta, valor], indice) => {
-    const boton = document.createElement('button')
-    boton.type = 'button'
-    boton.className = `filter-chip${indice === 0 ? ' selected' : ''}`
-    boton.textContent = etiqueta
-    boton.dataset.filtro = valor
-    boton.setAttribute('aria-pressed', String(indice === 0))
-    boton.addEventListener('click', () => {
-      filtroJaberosCampania = valor
-      consultaChips.querySelectorAll('.filter-chip').forEach((item) => {
-        const seleccionado = item === boton
-        item.classList.toggle('selected', seleccionado)
-        item.setAttribute('aria-pressed', String(seleccionado))
-      })
-      renderJaberosCampania()
-    })
-    consultaChips.append(boton)
-  })
+  consultaChips.classList.add('oculto')
 
   consultaTablaHead.replaceChildren()
   for (const columna of ['Jabero', 'DNI', 'Estado']) {
@@ -662,10 +613,8 @@ async function prepararConsultaJaberosCampania() {
 }
 
 function renderJaberosCampania() {
-  const jaberosDisponibles = filtrarJaberosCampania(trabajadoresConsultaActual)
   const jaberos = filtrarJaberosCampania(trabajadoresConsultaActual, {
-    busqueda: consultaBusqueda.value,
-    filtro: filtroJaberosCampania
+    busqueda: consultaBusqueda.value
   })
 
   consultaTablaBody.replaceChildren()
@@ -676,7 +625,7 @@ function renderJaberosCampania() {
     const nombreCell = document.createElement('td')
     nombreCell.className = 'industrial-table__person'
     const nombre = document.createElement('strong')
-    nombre.textContent = trabajador.nombre || 'Sin nombre'
+    nombre.textContent = nombreCosechadorVisible(trabajador.nombre, trabajador.dni)
     nombreCell.append(nombre)
 
     const dniCell = document.createElement('td')
@@ -708,19 +657,11 @@ function renderJaberosCampania() {
 
   const hayBusqueda = consultaBusqueda.value.trim().length > 0
   let titulo = 'No hay jaberos registrados en esta campaña.'
-  let detalle = 'Los registros sincronizados y pendientes aparecerán aquí.'
+  let detalle = 'Los jaberos registrados aparecerán aquí, incluso sin conexión.'
 
   if (hayBusqueda) {
     titulo = 'No se encontraron jaberos.'
     detalle = 'Pruebe con otro nombre o DNI.'
-  } else if (jaberosDisponibles.length > 0) {
-    if (filtroJaberosCampania === FILTROS_JABEROS_CAMPANIA.PENDIENTE) {
-      titulo = 'No hay jaberos pendientes de sincronización.'
-      detalle = 'No existen registros locales pendientes en este momento.'
-    } else if (filtroJaberosCampania === FILTROS_JABEROS_CAMPANIA.ERROR) {
-      titulo = 'No hay registros de jabero con error.'
-      detalle = 'No existen intentos fallidos de registro en este momento.'
-    }
   }
 
   consultaEmpty.querySelector('strong').textContent = titulo
@@ -1548,6 +1489,36 @@ function formatearNumero(valor) {
   return Number(valor || 0).toLocaleString('es-PE')
 }
 
+async function actualizarConsultaOperativa() {
+  if (btnActualizarConsulta.disabled || !operador) return
+  const consulta = consultaActual
+  if (!['asignados-hoy', 'jaberos-campania'].includes(consulta?.id)) return
+  btnActualizarConsulta.disabled = true
+  btnActualizarConsulta.setAttribute('aria-busy', 'true')
+  consultaFeedback.classList.add('oculto')
+  try {
+    if (!navigator.onLine) {
+      throw new Error('Sin conexión. Conéctese para actualizar los datos.')
+    }
+    await actualizarCacheOperativa(operador.dni)
+    if (consultaActual !== consulta || vistaConsulta.classList.contains('oculto'))
+      return
+    if (consulta.id === 'asignados-hoy') await prepararConsultaAsignadosHoy()
+    else await prepararConsultaJaberosCampania()
+  } catch (error) {
+    if (consultaActual !== consulta || vistaConsulta.classList.contains('oculto'))
+      return
+    consultaFeedback.textContent =
+      error.message || 'No se pudieron actualizar los datos.'
+    consultaFeedback.className = 'resultado error'
+  } finally {
+    btnActualizarConsulta.disabled = false
+    btnActualizarConsulta.removeAttribute('aria-busy')
+  }
+}
+
+btnActualizarConsulta.addEventListener('click', actualizarConsultaOperativa)
+
 consultaBusqueda.addEventListener('input', () => {
   if (consultaActual?.id === 'asignados-hoy') renderAsignadosHoy()
   if (consultaActual?.id === 'jaberos-campania') renderJaberosCampania()
@@ -1808,7 +1779,10 @@ configurarEnvioScanner(formCosechador, dniCosechadorInput, async (dni) => {
   }
   try {
     cosechador = await buscarCosechador(dni)
-    nombreCosechador.textContent = nombreCosechadorVisible(cosechador.nombre, cosechador.dni)
+    nombreCosechador.textContent = nombreCosechadorVisible(
+      cosechador.nombre,
+      cosechador.dni
+    )
     campaniaCosechador.textContent = cosechador.campania
     infoCosechador.classList.remove('oculto')
     desactivarTecladoManual(dniCosechadorInput)
@@ -1858,12 +1832,7 @@ configurarEnvioScanner(formTicket, codigoTicketInput, async (codigoTicket, liber
     return
   }
 
-  mostrarResultado(
-    navigator.onLine
-      ? `✓ Ticket ${codigoTicket} guardado · sincronización pendiente`
-      : `✓ Ticket ${codigoTicket} guardado sin conexión`,
-    'exito'
-  )
+  mostrarResultado(`Ticket ${codigoTicket} asignado`, 'exito')
   desactivarTecladoManual(codigoTicketInput)
   setTimeout(prepararSiguienteCosechador, 1200)
   liberar()
@@ -1891,18 +1860,14 @@ configurarEnvioScanner(formJabero, dniJaberoInput, async (dni, liberar) => {
   try {
     const trabajador = await obtenerTrabajador(dni)
 
-    if (!trabajador) {
-      throw new Error('El trabajador no está disponible en la campaña actual.')
-    }
-
-    if (trabajador.roles?.includes('JABERO')) {
+    if (trabajador?.roles?.includes('JABERO')) {
       throw new Error('El trabajador ya está registrado como jabero.')
     }
 
     await registrarJaberoOffline(operador.dni, dni)
 
     mostrarResultadoJabero(
-      `✓ ${trabajador.nombre} guardado como jabero · sincronización pendiente`,
+      `${nombreCosechadorVisible(trabajador?.nombre, dni)} registrado como jabero`,
       'exito'
     )
     dniJaberoInput.value = ''
@@ -2225,7 +2190,10 @@ configurarEnvioScanner(formLecturaTicket, ticketLectura, async (codigo, liberar)
       sesionLectura.sesion_id,
       ticket.cosechador_dni
     )
-    const nombreTicket = nombreCosechadorVisible(ticket.cosechador, ticket.cosechador_dni)
+    const nombreTicket = nombreCosechadorVisible(
+      ticket.cosechador,
+      ticket.cosechador_dni
+    )
     resultadoLectura.textContent = `✓ +1 jaba — ${nombreTicket}`
     resultadoLectura.className = 'resultado exito'
     totalSesion.textContent = total

@@ -380,3 +380,68 @@ test('40. dropdown de Rol bloquea valores libres', () => {
   assert.match(bloqueRol, /requireValueInList\(opcionesRoles, true\)/)
   assert.match(bloqueRol, /setAllowInvalid\(false\)/)
 })
+
+test('provisionales aceptan trabajador vacío o nullable sin relajar identidad, rol y booleanos', () => {
+  const raw = {
+    id: ROL_ID, trabajador_id: TRAB_ID, dni: '43829105',
+    trabajador: '', campania_id: CAMP_ID, campania_codigo: 'CAMP-ARA-2026',
+    campania_estado: 'ACTIVA', rol: 'COSECHADOR', activo: true, acceso_app: false
+  }
+  for (const nombre of ['', null, '   ']) {
+    const r = normalizarListadoRolesCampaniaScc_({ ok: true, roles: [{ ...raw, trabajador: nombre }] })[0]
+    assert.equal(r.trabajador, 'ASIGNAR NOMBRE')
+    assert.equal(r.dni, '43829105')
+    assert.equal(r.activo, true)
+    assert.equal(r.accesoApp, false)
+  }
+  for (const invalido of [
+    { id: null }, { trabajador_id: 'no-uuid' }, { campania_id: null },
+    { dni: '123' }, { campania_codigo: '' }, { rol: 'OTRO' }, { activo: null },
+    { acceso_app: 'invalido' }
+  ]) {
+    assert.throws(() => normalizarListadoRolesCampaniaScc_({ ok: true, roles: [{ ...raw, ...invalido }] }))
+  }
+})
+
+test('fallback informativo nunca participa en payload de guardado del rol', () => {
+  const provisional = trabajador({ dni: '43829105', nombres: '', apellidos: '' })
+  assert.equal(contexto.nombreVisibleTrabajadorRolCampaniaScc_(provisional), 'ASIGNAR NOMBRE')
+  const payload = prepararRolCampaniaParaGuardarScc_(
+    fila({ dni: '43829105', trabajador: 'ASIGNAR NOMBRE', rol: 'COSECHADOR' }),
+    [provisional], [campania()], []
+  )
+  assert.doesNotMatch(JSON.stringify(payload), /ASIGNAR NOMBRE|nombres|apellidos/)
+  assert.equal(provisional.nombres, '')
+  assert.equal(provisional.apellidos, '')
+  assert.equal(payload.p_trabajador_id, TRAB_ID)
+})
+
+test('Actualizar de Apps Script escribe fallback en B y después nombre real conservando IDs', () => {
+  const escritos = []
+  const hoja = {
+    getLastRow: () => 2,
+    getRange: (...rango) => ({ clearContent() {}, setValues: (valores) => escritos.push({ rango, valores }) })
+  }
+  let nombre = ''
+  const ctx = vm.createContext({
+    Date, SCC_CONFIG: {},
+    llamarRpcSupabase_: () => ({ ok: true, roles: [{
+      id: ROL_ID, trabajador_id: TRAB_ID, dni: '43829105', trabajador: nombre,
+      campania_id: CAMP_ID, campania_codigo: 'CAMP-ARA-2026', campania_estado: 'ACTIVA',
+      rol: 'COSECHADOR', activo: true, acceso_app: false
+    }] })
+  })
+  vm.runInContext(trabajadoresPure + '\n' + lotesPure + '\n' + rolesPure + '\n' + rolesSource, ctx)
+  ctx.configurarHojaRolesCampania_ = () => hoja
+  ctx.leerFilasRolesCampania_ = () => []
+  ctx.refrescarValidacionesRolesCampania_ = () => {}
+  assert.equal(ctx.actualizarRolesCampaniaDesdeSistema_(), 1)
+  assert.equal(escritos[0].valores[0][0], '43829105')
+  assert.equal(escritos[0].valores[0][1], 'ASIGNAR NOMBRE')
+  assert.equal(escritos[0].valores[0][3], 'COSECHADOR')
+  assert.equal(escritos[0].valores[0][5], 'SINCRONIZADO')
+  nombre = 'Fausto Rodríguez'
+  assert.equal(ctx.actualizarRolesCampaniaDesdeSistema_(), 1)
+  assert.equal(escritos[1].valores[0][1], 'Fausto Rodríguez')
+  assert.equal(escritos[1].valores[0][7], escritos[0].valores[0][7])
+})

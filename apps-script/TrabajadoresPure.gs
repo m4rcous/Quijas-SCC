@@ -39,6 +39,67 @@ function esFilaPendienteScc_(estado) {
   return String(estado == null ? '' : estado).trim().toUpperCase() === 'PENDIENTE';
 }
 
+function tieneValorAdministrativoScc_(valor) {
+  return valor != null && String(valor).trim() !== '';
+}
+
+function obtenerCamposAdministrativosFilaScc_(fila) {
+  var actual = fila || {};
+  if (Object.prototype.hasOwnProperty.call(actual, 'rol')) {
+    return ['dni', 'campania', 'rol', 'activo'];
+  }
+  if (Object.prototype.hasOwnProperty.call(actual, 'variedad')) {
+    return ['codigo', 'nombre', 'campania', 'variedad', 'activo'];
+  }
+  if (Object.prototype.hasOwnProperty.call(actual, 'fechaInicio') ||
+      Object.prototype.hasOwnProperty.call(actual, 'fechaFin') ||
+      Object.prototype.hasOwnProperty.call(actual, 'estado')) {
+    return ['codigo', 'nombre', 'fechaInicio', 'fechaFin', 'estado'];
+  }
+  if (Object.prototype.hasOwnProperty.call(actual, 'nombres') ||
+      Object.prototype.hasOwnProperty.call(actual, 'apellidos') ||
+      Object.prototype.hasOwnProperty.call(actual, 'dni')) {
+    return ['dni', 'nombres', 'apellidos', 'activo'];
+  }
+  if (Object.prototype.hasOwnProperty.call(actual, 'nombre') ||
+      Object.prototype.hasOwnProperty.call(actual, 'activo')) {
+    return ['nombre', 'activo'];
+  }
+  return [];
+}
+
+function esFilaAdministrativaVaciaScc_(fila) {
+  var campos = obtenerCamposAdministrativosFilaScc_(fila);
+  if (!campos.length) return false;
+  return !campos.some(function (campo) {
+    return tieneValorAdministrativoScc_(fila && fila[campo]);
+  });
+}
+
+function filtrarFilasPendientesConDatosScc_(filas) {
+  return (filas || []).filter(function (fila) {
+    return esFilaPendienteScc_(fila.estadoSync) && !esFilaAdministrativaVaciaScc_(fila);
+  });
+}
+
+function obtenerUltimaFilaAdministrativaScc_(hoja, columnasAdministrativas) {
+  var ultimaFilaHoja = hoja.getLastRow();
+  if (ultimaFilaHoja <= 1) return 1;
+
+  var columnas = (columnasAdministrativas || []).slice();
+  if (!columnas.length) return 1;
+  var ultimaColumna = Math.max.apply(null, columnas);
+  var valores = hoja.getRange(2, 1, ultimaFilaHoja - 1, ultimaColumna).getValues();
+
+  for (var indice = valores.length - 1; indice >= 0; indice -= 1) {
+    var tieneDatos = columnas.some(function (columna) {
+      return tieneValorAdministrativoScc_(valores[indice][columna - 1]);
+    });
+    if (tieneDatos) return indice + 2;
+  }
+  return 1;
+}
+
 function debeMarcarPendienteOnEditScc_(nombreHoja, fila, columnaInicial, numeroColumnas) {
   if (nombreHoja !== 'TRABAJADORES' || fila <= 1) return false;
   var columnaFinal = columnaInicial + Math.max(1, Number(numeroColumnas) || 1) - 1;
@@ -67,6 +128,7 @@ function normalizarListadoTrabajadoresScc_(respuesta) {
 
 function tieneCambiosLocalesNoResueltosScc_(filas) {
   return filas.some(function (fila) {
+    if (esFilaAdministrativaVaciaScc_(fila)) return false;
     var estado = String(fila.estadoSync == null ? '' : fila.estadoSync)
       .trim()
       .toUpperCase();
@@ -93,7 +155,9 @@ function prepararTrabajadorParaGuardarScc_(fila) {
 function procesarFilasPendientesScc_(filas, guardar, ahora) {
   var obtenerAhora = ahora || function () { return new Date(); };
   return filas.map(function (fila) {
-    if (!esFilaPendienteScc_(fila.estadoSync)) return Object.assign({}, fila);
+    if (!esFilaPendienteScc_(fila.estadoSync) || esFilaAdministrativaVaciaScc_(fila)) {
+      return Object.assign({}, fila);
+    }
 
     var idAnterior = fila.idSistema;
     try {

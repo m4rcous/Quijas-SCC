@@ -465,6 +465,7 @@ test('REGISTRAR JABERO también espera el DNI completo y registra una vez', asyn
     limpiarResultadoJabero() {},
     mostrarResultadoJabero: (mensaje, tipo) => mensajes.push({ mensaje, tipo }),
     obtenerTrabajador: async () => ({ nombre: 'Ana', roles: [] }),
+    nombreCosechadorVisible: (nombre, dni) => nombre || `DNI ${dni}`,
     registrarJaberoOffline: async (operador, dni) => registros.push({ operador, dni })
   })
   await escanearDniConUltimoDigitoTardio(vista.input)

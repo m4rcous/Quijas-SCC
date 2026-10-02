@@ -156,7 +156,9 @@ function procesarFilasPendientesCampaniasScc_(
 ) {
   var obtenerAhora = ahora || function () { return new Date(); };
   return filas.map(function (fila) {
-    if (!esFilaPendienteScc_(fila.estadoSync)) return Object.assign({}, fila);
+    if (!esFilaPendienteScc_(fila.estadoSync) || esFilaAdministrativaVaciaScc_(fila)) {
+      return Object.assign({}, fila);
+    }
 
     var idAnterior = fila.idSistema;
     try {

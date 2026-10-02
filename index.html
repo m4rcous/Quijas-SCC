@@ -840,7 +840,7 @@
           <span class="app-header__spacer"></span>
         </header>
         <div class="contenido contenido-datos">
-          <div class="titulo-pagina titulo-pagina--datos">
+          <div id="consulta-introduccion" class="titulo-pagina titulo-pagina--datos">
             <p class="eyebrow">Consulta</p>
             <h1 id="titulo-consulta">Consulta</h1>
             <p id="descripcion-consulta">Revise la información disponible.</p>
@@ -851,13 +851,21 @@
               <input id="consulta-busqueda" type="search" placeholder="Buscar..." />
             </label>
             <button
+              id="btn-actualizar-consulta"
               type="button"
-              class="icon-button btn-secondary"
-              aria-label="Filtros"
+              class="btn-secondary oculto"
+              title="Actualizar"
             >
-              <svg aria-hidden="true"><use href="#icon-filter"></use></svg>
+              <svg aria-hidden="true"><use href="#icon-refresh"></use></svg>
+              Actualizar
             </button>
           </div>
+          <p
+            id="consulta-feedback"
+            class="resultado oculto"
+            role="status"
+            aria-live="polite"
+          ></p>
           <div
             id="consulta-chips"
             class="filter-chips"
