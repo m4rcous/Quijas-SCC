@@ -152,10 +152,10 @@ for (const id of ['asignados-hoy', 'jaberos-campania']) {
     assert.ok(vista.nodes.tituloConsultaHeader.textContent)
     const bloque = html.slice(html.indexOf('<section id="vista-consulta"'))
     assert.doesNotMatch(bloque, /aria-label="Filtros"|href="#icon-filter"/)
-    assert.match(
-      bloque,
-      /id="btn-actualizar-consulta"[\s\S]*?#icon-refresh[\s\S]*?Actualizar/
-    )
+    const boton = bloque.match(/<button\s+id="btn-actualizar-consulta"[\s\S]*?<\/button>/)[0]
+    assert.match(boton, /aria-label="Actualizar"/)
+    assert.match(boton, /href="#icon-refresh"/)
+    assert.doesNotMatch(boton, />\s*Actualizar\s*</)
   })
 }
 
