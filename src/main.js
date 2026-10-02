@@ -1823,7 +1823,7 @@ configurarEnvioScanner(formCosechador, dniCosechadorInput, async (dni) => {
 
 // ASIGNAR TICKET
 
-configurarEnvioScanner(formTicket, codigoTicketInput, async (codigoTicket) => {
+configurarEnvioScanner(formTicket, codigoTicketInput, async (codigoTicket, liberar) => {
   limpiarResultado()
   if (!operador || !cosechador) {
     return
@@ -1866,6 +1866,7 @@ configurarEnvioScanner(formTicket, codigoTicketInput, async (codigoTicket) => {
   )
   desactivarTecladoManual(codigoTicketInput)
   setTimeout(prepararSiguienteCosechador, 1200)
+  liberar()
   await actualizarEstadoConexion()
 
   if (navigator.onLine) {

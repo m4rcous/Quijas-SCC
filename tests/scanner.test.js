@@ -10,13 +10,15 @@ import {
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
-const siguienteTurno = () => new Promise((resolve) => setTimeout(resolve, 0))
+const siguienteTurno = () => new Promise((resolve) => setTimeout(resolve, 70))
 
 function elemento() {
   const eventos = new Map()
   return {
     value: '',
     disabled: false,
+    focus() {},
+    select() {},
     addEventListener(tipo, callback) {
       const callbacks = eventos.get(tipo) ?? []
       callbacks.push(callback)
@@ -90,6 +92,108 @@ test('Enter lee el DOM después de completar la escritura, sin usar un valor ant
   input.value = '17480378\r'
   input.emitir('input')
   assert.deepEqual(valores, [])
+  await siguienteTurno()
+  assert.deepEqual(valores, ['17480378'])
+})
+
+test('espera el último input aunque llegue en otro turno después de Enter', async () => {
+  const form = elemento()
+  const input = elemento()
+  const valores = []
+  configurarEnvioScanner(form, input, (dni) => valores.push(dni))
+  input.value = '1748037'
+  input.emitir('keydown', { key: 'Enter' })
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  input.value = '17480378'
+  input.emitir('input', { data: '8', inputType: 'insertText' })
+  await new Promise((resolve) => setTimeout(resolve, 60))
+  assert.deepEqual(valores, ['17480378'])
+})
+
+for (const propiedades of [
+  { key: 'Unidentified', keyCode: 13 },
+  { key: 'Unidentified', code: 'NumpadEnter' },
+  { keyCode: 13 }
+]) {
+  test(`procesa Enter no identificado con ${JSON.stringify(propiedades)}`, async () => {
+    const form = elemento()
+    const input = elemento()
+    const valores = []
+    configurarEnvioScanner(form, input, (dni) => valores.push(dni))
+    input.value = '01748037'
+    const event = input.emitir('keydown', propiedades)
+    await siguienteTurno()
+    assert.equal(event.defaultPrevented, true)
+    assert.deepEqual(valores, ['01748037'])
+  })
+}
+
+test('un CR recibido por input sin keydown termina el escaneo', async () => {
+  const form = elemento()
+  const input = elemento()
+  const valores = []
+  configurarEnvioScanner(form, input, (dni) => valores.push(dni))
+  input.value = '17480378'
+  input.emitir('input', { data: '17480378\r', inputType: 'insertText' })
+  await siguienteTurno()
+  assert.deepEqual(valores, ['17480378'])
+})
+
+test('un salto de línea por beforeinput termina el escaneo sin insertarse', async () => {
+  const form = elemento()
+  const input = elemento()
+  const valores = []
+  configurarEnvioScanner(form, input, (dni) => valores.push(dni))
+  input.value = '17480378'
+  const event = input.emitir('beforeinput', {
+    data: null,
+    inputType: 'insertLineBreak'
+  })
+  form.emitir('submit')
+  await siguienteTurno()
+  assert.equal(event.defaultPrevented, true)
+  assert.deepEqual(valores, ['17480378'])
+})
+
+test('datos y CR juntos en beforeinput se escriben antes de procesar el DOM', async () => {
+  const form = elemento()
+  const input = elemento()
+  const valores = []
+  configurarEnvioScanner(form, input, (dni) => valores.push(dni))
+  const event = input.emitir('beforeinput', {
+    data: '01748037\r',
+    inputType: 'insertText'
+  })
+  assert.equal(event.defaultPrevented, false)
+  input.value = '01748037'
+  input.emitir('input', { data: '01748037\r', inputType: 'insertText' })
+  await siguienteTurno()
+  assert.deepEqual(valores, ['01748037'])
+})
+
+test('escribir ocho dígitos sin terminador no envía y el código 229 no es Enter', async () => {
+  const form = elemento()
+  const input = elemento()
+  const valores = []
+  configurarEnvioScanner(form, input, (dni) => valores.push(dni))
+  input.value = '17480378'
+  input.emitir('input', { data: '17480378', inputType: 'insertText' })
+  input.emitir('keydown', { key: 'Unidentified', keyCode: 229 })
+  input.emitir('keydown', { key: '8', keyCode: 13 })
+  await siguienteTurno()
+  assert.deepEqual(valores, [])
+})
+
+test('Enter, beforeinput, input y submit del mismo escaneo se agrupan una sola vez', async () => {
+  const form = elemento()
+  const input = elemento()
+  const valores = []
+  configurarEnvioScanner(form, input, (dni) => valores.push(dni))
+  input.value = '17480378'
+  input.emitir('keydown', { key: 'Enter' })
+  input.emitir('beforeinput', { data: '\r', inputType: 'insertText' })
+  input.emitir('input', { data: '\r', inputType: 'insertText' })
+  form.emitir('submit')
   await siguienteTurno()
   assert.deepEqual(valores, ['17480378'])
 })
@@ -282,6 +386,197 @@ test('ASIGNAR TICKETS no valida los siete dígitos anteriores al último input',
   await siguienteTurno()
   assert.deepEqual(vista.mensajes, [])
   assert.equal(vista.habilitaciones(), 1)
+})
+
+test('ASIGNAR TICKETS espera inputs de tareas posteriores y rechaza un noveno dígito', async () => {
+  for (const dni of ['17480378', '174803789']) {
+    const vista = asignacionSimulada()
+    vista.input.value = '1748037'
+    vista.input.emitir('keydown', { key: 'Enter' })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    vista.input.value = dni
+    vista.input.emitir('input', { data: dni.slice(7), inputType: 'insertText' })
+    await siguienteTurno()
+    if (dni.length === 8) {
+      assert.deepEqual(vista.mensajes, [])
+      assert.equal(vista.habilitaciones(), 1)
+    } else {
+      assert.deepEqual(vista.mensajes, ['El DNI debe contener 8 dígitos.'])
+      assert.equal(vista.busquedas(), 0)
+    }
+  }
+})
+
+function formularioSimulado(nombreForm, nombreInput, marcadorFin, contextoExtra) {
+  const form = elemento()
+  const input = elemento()
+  const inicio = main.indexOf(`configurarEnvioScanner(${nombreForm},`)
+  const fin = main.indexOf(marcadorFin, inicio)
+  assert.ok(inicio >= 0 && fin > inicio)
+  const contexto = {
+    configurarEnvioScanner,
+    esDniValido,
+    [nombreForm]: form,
+    [nombreInput]: input,
+    navigator: { onLine: false },
+    desactivarTecladoManual() {},
+    actualizarEstadoConexion: async () => {},
+    ...contextoExtra
+  }
+  runInNewContext(main.slice(inicio, fin), contexto)
+  return { form, input, contexto }
+}
+
+async function escanearDniConUltimoDigitoTardio(input) {
+  input.value = '0174803'
+  input.emitir('keydown', { key: 'Enter' })
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  input.value = '01748037'
+  input.emitir('input', { data: '7', inputType: 'insertText' })
+  await siguienteTurno()
+}
+
+test('LOGIN también espera el DNI completo cuando el último input llega tarde', async () => {
+  const errores = []
+  const consultas = []
+  let continuaciones = 0
+  const vista = formularioSimulado('formLogin', 'dniOperadorInput', '// MENÚ', {
+    operador: null,
+    limpiarMensajeLogin() {},
+    mostrarErrorLogin: (mensaje) => errores.push(mensaje),
+    validarOperador: async (dni) => {
+      consultas.push(dni)
+      return { dni, offline: true }
+    },
+    sessionStorage: { setItem() {} },
+    mostrarMenu: () => continuaciones++
+  })
+  await escanearDniConUltimoDigitoTardio(vista.input)
+  assert.deepEqual(errores, [])
+  assert.deepEqual(consultas, ['01748037'])
+  assert.equal(continuaciones, 1)
+})
+
+test('REGISTRAR JABERO también espera el DNI completo y registra una vez', async () => {
+  const mensajes = []
+  const registros = []
+  const vista = formularioSimulado('formJabero', 'dniJaberoInput', '// NAVEGACIÓN', {
+    operador: { dni: '17480378' },
+    limpiarResultadoJabero() {},
+    mostrarResultadoJabero: (mensaje, tipo) => mensajes.push({ mensaje, tipo }),
+    obtenerTrabajador: async () => ({ nombre: 'Ana', roles: [] }),
+    registrarJaberoOffline: async (operador, dni) => registros.push({ operador, dni })
+  })
+  await escanearDniConUltimoDigitoTardio(vista.input)
+  assert.deepEqual(registros, [{ operador: '17480378', dni: '01748037' }])
+  assert.equal(mensajes.length, 1)
+  assert.equal(mensajes[0].tipo, 'exito')
+})
+
+test('INICIAR LECTURA también espera el DNI del jabero y conserva el cero', async () => {
+  const errores = []
+  const sesiones = []
+  const lote = { lote_id: 'lote-1', codigo: 'L1', variedad: 'V1' }
+  let continuaciones = 0
+  const vista = formularioSimulado(
+    'formIniciarLectura',
+    'dniJaberoLectura',
+    'configurarEnvioScanner(formLecturaTicket,',
+    {
+      operador: { dni: '17480378' },
+      sesionLectura: null,
+      loteLectura: { value: lote.lote_id },
+      mostrarMensajeLectura: (mensaje) => errores.push(mensaje),
+      obtenerTrabajador: async () => ({ nombre: 'Ana', roles: ['JABERO'] }),
+      obtenerSesionActivaJabero: async () => null,
+      obtenerLotes: async () => [lote],
+      crypto: { randomUUID: () => 'sesion-1' },
+      iniciarSesionOffline: async (sesion) => sesiones.push(sesion),
+      mostrarSesionLectura: async () => continuaciones++
+    }
+  )
+  await escanearDniConUltimoDigitoTardio(vista.input)
+  assert.deepEqual(errores, [])
+  assert.equal(sesiones.length, 1)
+  assert.equal(sesiones[0].dni_jabero, '01748037')
+  assert.equal(continuaciones, 1)
+})
+
+test('ASIGNAR TICKET permite otro ticket aunque la sincronización anterior siga pendiente', async () => {
+  const asignaciones = []
+  const sincronizaciones = []
+  const vista = formularioSimulado(
+    'formTicket',
+    'codigoTicketInput',
+    '// REGISTRO DE JABEROS',
+    {
+      operador: { dni: '17480378' },
+      cosechador: { dni: '01748037', nombre: 'Ana' },
+      navigator: { onLine: true },
+      limpiarResultado() {},
+      mostrarResultado() {},
+      obtenerTicket: async () => null,
+      existeTicketPendiente: async () => false,
+      guardarAsignacionOffline: async (asignacion) => asignaciones.push(asignacion),
+      setTimeout() {},
+      prepararSiguienteCosechador() {},
+      sincronizarPendientes: () =>
+        new Promise((resolve) => sincronizaciones.push(resolve))
+    }
+  )
+  vista.input.value = 'TICKET-01'
+  vista.input.emitir('keydown', { key: 'Enter' })
+  vista.form.emitir('submit')
+  await siguienteTurno()
+  assert.equal(asignaciones.length, 1)
+  assert.equal(sincronizaciones.length, 1)
+  // Simular el campo habilitado para la siguiente asignación después del
+  // temporizador de la UI, sin dar por terminada la sincronización anterior.
+  vista.input.disabled = false
+  vista.input.value = 'TICKET-02'
+  vista.input.emitir('input', { data: 'TICKET-02\r', inputType: 'insertText' })
+  await siguienteTurno()
+  assert.deepEqual(
+    asignaciones.map(({ codigoTicket }) => codigoTicket),
+    ['TICKET-01', 'TICKET-02']
+  )
+  for (const terminar of sincronizaciones) terminar()
+})
+
+test('LECTURA DE TICKET también procesa CR por input una sola vez', async () => {
+  const lecturas = []
+  const vista = formularioSimulado(
+    'formLecturaTicket',
+    'ticketLectura',
+    'btnFinalizarLectura.addEventListener',
+    {
+      operador: { dni: '17480378' },
+      sesionLectura: { sesion_id: 'sesion-1', dni_jabero: '01748037' },
+      obtenerTrabajador: async () => ({ roles: ['JABERO'] }),
+      obtenerColaCompleta: async () => [],
+      obtenerTicket: async (codigo) => ({
+        codigo,
+        cosechador_dni: '01748037',
+        cosechador: 'Ana'
+      }),
+      crypto: { randomUUID: () => 'lectura-1' },
+      registrarLecturaOffline: async (lectura) => lecturas.push(lectura),
+      contarLecturasSesion: async () => 1,
+      contarLecturasCosechador: async () => 1,
+      nombreCosechadorVisible: (nombre) => nombre,
+      resultadoLectura: {},
+      totalSesion: {},
+      etiquetaCosechador: {},
+      totalCosechador: {},
+      mostrarContadorCosechador() {}
+    }
+  )
+  vista.input.value = '00012345'
+  vista.input.emitir('input', { data: '00012345\r', inputType: 'insertText' })
+  vista.form.emitir('submit')
+  await siguienteTurno()
+  assert.equal(lecturas.length, 1)
+  assert.equal(lecturas[0].codigo_ticket, '00012345')
 })
 
 test('ASIGNAR TICKETS mantiene la validación y permite corregir un DNI inválido', async () => {

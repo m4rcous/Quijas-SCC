@@ -20,7 +20,7 @@ as $$
 declare
   v_auth_user_id uuid;
 begin
-  v_auth_user_id := auth.uid();
+  v_auth_user_id := auth.uid();a
 
   if v_auth_user_id is null
      or not exists (
