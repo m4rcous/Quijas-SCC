@@ -582,6 +582,8 @@ test('LECTURA DE TICKET también procesa CR por input una sola vez', async () =>
       contarLecturasCosechador: async () => 1,
       nombreCosechadorVisible: (nombre) => nombre,
       resultadoLectura: {},
+      estadoLecturaTicket: {},
+      mostrarEstadoLecturaTicket() {},
       totalSesion: {},
       etiquetaCosechador: {},
       totalCosechador: {},

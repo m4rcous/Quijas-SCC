@@ -697,6 +697,11 @@ select:disabled {
   stroke-width: 2.2;
 }
 
+.paso-numero--error {
+  color: var(--color-error-fg);
+  background: var(--color-error-bg);
+}
+
 .deshabilitado {
   background: var(--color-disabled-bg);
   border-color: var(--color-line-200);

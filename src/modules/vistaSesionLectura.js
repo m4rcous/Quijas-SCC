@@ -1,3 +1,21 @@
+export function mostrarEstadoLecturaTicket(
+  mensajeError,
+  { estadoLecturaTicket, resultadoLectura }
+) {
+  const mensaje = String(mensajeError ?? '').trim()
+  const tieneError = Boolean(mensaje)
+  resultadoLectura.textContent = mensaje
+  resultadoLectura.className = tieneError ? 'resultado error' : 'resultado oculto'
+  estadoLecturaTicket.classList.toggle('paso-numero--error', tieneError)
+  estadoLecturaTicket.setAttribute(
+    'aria-label',
+    tieneError ? 'Error al leer ticket' : 'Lectura correcta'
+  )
+  estadoLecturaTicket
+    .querySelector('use')
+    .setAttribute('href', tieneError ? '#icon-close' : '#icon-check')
+}
+
 export function mostrarContadorCosechador(
   nombre,
   cantidad,
@@ -21,7 +39,9 @@ export async function mostrarSesionLecturaEnVista(
     etiquetaCosechador,
     totalCosechador,
     mensajeModuloLectura,
-    ticketLectura
+    ticketLectura,
+    estadoLecturaTicket,
+    resultadoLectura
   },
   {
     contarLecturasSesion,
@@ -55,6 +75,7 @@ export async function mostrarSesionLecturaEnVista(
   })
   mensajeModuloLectura.textContent = ''
   mensajeModuloLectura.className = 'resultado oculto'
+  mostrarEstadoLecturaTicket('', { estadoLecturaTicket, resultadoLectura })
   ticketLectura.value = ''
   ticketLectura.focus()
 }

@@ -1,6 +1,8 @@
 import 'fake-indexeddb/auto'
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { readFileSync } from 'node:fs'
+import { runInNewContext } from 'node:vm'
 
 import {
   contarLecturasCosechador,
@@ -13,6 +15,7 @@ import {
 } from '../src/offline/db.js'
 import {
   mostrarContadorCosechador,
+  mostrarEstadoLecturaTicket,
   mostrarSesionLecturaEnVista
 } from '../src/modules/vistaSesionLectura.js'
 
@@ -26,6 +29,8 @@ const consultas = {
 
 function elemento() {
   const clases = new Set()
+  const atributos = new Map()
+  const hijos = new Map()
   return {
     textContent: '',
     className: '',
@@ -34,7 +39,17 @@ function elemento() {
     classList: {
       add: (clase) => clases.add(clase),
       remove: (clase) => clases.delete(clase),
-      contains: (clase) => clases.has(clase)
+      contains: (clase) => clases.has(clase),
+      toggle: (clase, activo) => (activo ? clases.add(clase) : clases.delete(clase))
+    },
+    setAttribute: (nombre, valor) => atributos.set(nombre, valor),
+    getAttribute: (nombre) => atributos.get(nombre),
+    querySelector(selector) {
+      if (!hijos.has(selector)) hijos.set(selector, elemento())
+      return hijos.get(selector)
+    },
+    select() {
+      this.seleccionado = true
     },
     focus() {
       this.enfocado = true
@@ -54,7 +69,9 @@ function vista() {
       'etiquetaCosechador',
       'totalCosechador',
       'mensajeModuloLectura',
-      'ticketLectura'
+      'ticketLectura',
+      'resultadoLectura',
+      'estadoLecturaTicket'
     ].map((nombre) => [nombre, elemento()])
   )
 }
@@ -67,6 +84,7 @@ test('una sesión válida oculta el error previo de configuración', async () =>
   const elementos = vista()
   elementos.mensajeModuloLectura.textContent = 'El DNI debe contener 8 dígitos.'
   elementos.mensajeModuloLectura.className = 'resultado error'
+  mostrarEstadoLecturaTicket('Error anterior', elementos)
   await mostrarSesionLecturaEnVista(sesion('ui-sesion-nueva'), elementos, consultas)
 
   assert.equal(elementos.mensajeModuloLectura.textContent, '')
@@ -74,6 +92,156 @@ test('una sesión válida oculta el error previo de configuración', async () =>
   assert.equal(elementos.configuracionLectura.classList.contains('oculto'), true)
   assert.equal(elementos.sesionLecturaActiva.classList.contains('oculto'), false)
   assert.equal(elementos.ticketLectura.enfocado, true)
+  assert.equal(elementos.resultadoLectura.textContent, '')
+  assert.equal(elementos.resultadoLectura.className, 'resultado oculto')
+  assert.equal(
+    elementos.estadoLecturaTicket.querySelector('use').getAttribute('href'),
+    '#icon-check'
+  )
+  assert.equal(
+    elementos.estadoLecturaTicket.classList.contains('paso-numero--error'),
+    false
+  )
+})
+
+function escaneoSimulado({ onLine = false, errorGuardar = null } = {}) {
+  const elementos = vista()
+  const lecturas = []
+  let procesar
+  const contexto = {
+    ...elementos,
+    formLecturaTicket: {},
+    configurarEnvioScanner: (_form, _input, callback) => {
+      procesar = callback
+    },
+    sesionLectura: { sesion_id: 'sesion-ui', dni_jabero: '76338971' },
+    operador: { dni: '47480378' },
+    obtenerTrabajador: async () => ({ estado_sync_jabero: 'SINCRONIZADO' }),
+    obtenerColaCompleta: async () => [],
+    obtenerTicket: async (codigo) =>
+      codigo === 'VALIDO'
+        ? {
+            codigo_ticket: codigo,
+            cosechador_dni: '43829105',
+            cosechador: 'Fausto Rodríguez',
+            estado_sync: 'SINCRONIZADO'
+          }
+        : null,
+    crypto: { randomUUID: () => `lectura-${lecturas.length}` },
+    registrarLecturaOffline: async (lectura) => {
+      if (errorGuardar) throw new Error(errorGuardar)
+      lecturas.push(lectura)
+    },
+    contarLecturasSesion: async () => lecturas.length,
+    contarLecturasCosechador: async () => lecturas.length,
+    nombreCosechadorVisible: (nombre, dni) => nombre || `DNI ${dni}`,
+    mostrarContadorCosechador,
+    mostrarEstadoLecturaTicket,
+    desactivarTecladoManual() {},
+    navigator: { onLine },
+    sincronizarPendientes: async () => {},
+    actualizarEstadoConexion: async () => {}
+  }
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  const inicio = main.indexOf('configurarEnvioScanner(formLecturaTicket,')
+  const fin = main.indexOf('btnFinalizarLectura.addEventListener', inicio)
+  runInNewContext(main.slice(inicio, fin), contexto)
+  return {
+    elementos,
+    lecturas,
+    contexto,
+    procesar: (codigo) => procesar(codigo, () => {})
+  }
+}
+
+test('lectura válida online y offline actualiza conteos sin mensaje de éxito y mantiene check', async () => {
+  for (const onLine of [true, false]) {
+    const { elementos, lecturas, procesar } = escaneoSimulado({ onLine })
+    await procesar('VALIDO')
+    assert.equal(lecturas.length, 1)
+    assert.equal(elementos.totalSesion.textContent, 1)
+    assert.equal(elementos.etiquetaCosechador.textContent, 'Fausto Rodríguez')
+    assert.equal(elementos.totalCosechador.textContent, '1 jaba')
+    assert.equal(elementos.resultadoLectura.textContent, '')
+    assert.equal(elementos.resultadoLectura.className, 'resultado oculto')
+    assert.equal(
+      elementos.estadoLecturaTicket.querySelector('use').getAttribute('href'),
+      '#icon-check'
+    )
+    assert.equal(
+      elementos.estadoLecturaTicket.classList.contains('paso-numero--error'),
+      false
+    )
+  }
+})
+
+test('ticket no asignado muestra error y cambia indicador a X roja sin registrar jaba', async () => {
+  const { elementos, lecturas, procesar } = escaneoSimulado()
+  await procesar('NO-ASIGNADO')
+  assert.equal(lecturas.length, 0)
+  assert.equal(
+    elementos.resultadoLectura.textContent,
+    'El ticket no está asignado a ningún cosechador.'
+  )
+  assert.equal(elementos.resultadoLectura.className, 'resultado error')
+  assert.equal(
+    elementos.estadoLecturaTicket.querySelector('use').getAttribute('href'),
+    '#icon-close'
+  )
+  assert.equal(
+    elementos.estadoLecturaTicket.classList.contains('paso-numero--error'),
+    true
+  )
+  assert.equal(
+    elementos.estadoLecturaTicket.getAttribute('aria-label'),
+    'Error al leer ticket'
+  )
+  assert.equal(elementos.ticketLectura.seleccionado, true)
+})
+
+test('lectura correcta después de error limpia el mensaje y restaura el check', async () => {
+  const { elementos, lecturas, procesar } = escaneoSimulado()
+  await procesar('NO-ASIGNADO')
+  await procesar('VALIDO')
+  assert.equal(lecturas.length, 1)
+  assert.equal(elementos.resultadoLectura.textContent, '')
+  assert.equal(elementos.resultadoLectura.className, 'resultado oculto')
+  assert.equal(
+    elementos.estadoLecturaTicket.querySelector('use').getAttribute('href'),
+    '#icon-check'
+  )
+  assert.equal(
+    elementos.estadoLecturaTicket.classList.contains('paso-numero--error'),
+    false
+  )
+})
+
+test('error al guardar lectura muestra mensaje y X roja', async () => {
+  const { elementos, lecturas, procesar } = escaneoSimulado({
+    errorGuardar: 'No se pudo guardar la jaba'
+  })
+  await procesar('VALIDO')
+  assert.equal(lecturas.length, 0)
+  assert.equal(elementos.resultadoLectura.textContent, 'No se pudo guardar la jaba')
+  assert.equal(
+    elementos.estadoLecturaTicket.classList.contains('paso-numero--error'),
+    true
+  )
+})
+
+test('ticket con error de sincronización muestra X roja y mantiene rechazo operativo', async () => {
+  const { elementos, lecturas, contexto, procesar } = escaneoSimulado()
+  contexto.obtenerTicket = async () => ({ estado_sync: 'ERROR' })
+  await procesar('VALIDO')
+  assert.equal(lecturas.length, 0)
+  assert.equal(
+    elementos.resultadoLectura.textContent,
+    'Este ticket presenta un error de sincronización.'
+  )
+  assert.equal(
+    elementos.estadoLecturaTicket.querySelector('use').getAttribute('href'),
+    '#icon-close'
+  )
 })
 
 test('una sesión sin lecturas muestra el estado inicial neutral', async () => {

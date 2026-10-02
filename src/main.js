@@ -35,6 +35,7 @@ import { configurarTecladoManual } from './modules/tecladoManual'
 import { configurarEnvioScanner, esDniValido } from './modules/scanner'
 import {
   mostrarContadorCosechador,
+  mostrarEstadoLecturaTicket,
   mostrarSesionLecturaEnVista
 } from './modules/vistaSesionLectura'
 import {
@@ -217,6 +218,7 @@ const sesionVariedad = document.querySelector('#sesion-variedad')
 const formLecturaTicket = document.querySelector('#form-lectura-ticket')
 const ticketLectura = document.querySelector('#ticket-lectura')
 const resultadoLectura = document.querySelector('#resultado-lectura')
+const estadoLecturaTicket = document.querySelector('#estado-lectura-ticket')
 const totalSesion = document.querySelector('#total-sesion')
 const etiquetaCosechador = document.querySelector('#etiqueta-cosechador')
 const totalCosechador = document.querySelector('#total-cosechador')
@@ -2190,8 +2192,7 @@ configurarEnvioScanner(formLecturaTicket, ticketLectura, async (codigo, liberar)
       ticket.cosechador,
       ticket.cosechador_dni
     )
-    resultadoLectura.textContent = `✓ +1 jaba — ${nombreTicket}`
-    resultadoLectura.className = 'resultado exito'
+    mostrarEstadoLecturaTicket('', { estadoLecturaTicket, resultadoLectura })
     totalSesion.textContent = total
     mostrarContadorCosechador(nombreTicket, totalPersona, {
       etiquetaCosechador,
@@ -2202,8 +2203,10 @@ configurarEnvioScanner(formLecturaTicket, ticketLectura, async (codigo, liberar)
     desactivarTecladoManual(ticketLectura)
     ticketLectura.focus()
   } catch (error) {
-    resultadoLectura.textContent = error.message
-    resultadoLectura.className = 'resultado error'
+    mostrarEstadoLecturaTicket(error.message || 'No se pudo registrar la lectura.', {
+      estadoLecturaTicket,
+      resultadoLectura
+    })
     ticketLectura.disabled = false
     ticketLectura.select()
     return
@@ -2284,7 +2287,9 @@ async function mostrarSesionLectura() {
       etiquetaCosechador,
       totalCosechador,
       mensajeModuloLectura,
-      ticketLectura
+      ticketLectura,
+      estadoLecturaTicket,
+      resultadoLectura
     },
     {
       contarLecturasSesion,
@@ -2308,7 +2313,7 @@ function limpiarModuloLectura() {
   sesionLecturaActiva.classList.add('oculto')
   dniJaberoLectura.value = ''
   ticketLectura.value = ''
-  resultadoLectura.className = 'resultado oculto'
+  mostrarEstadoLecturaTicket('', { estadoLecturaTicket, resultadoLectura })
   mensajeModuloLectura.textContent = ''
   mensajeModuloLectura.className = 'resultado oculto'
   totalSesion.textContent = '0'
