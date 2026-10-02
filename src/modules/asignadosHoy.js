@@ -22,14 +22,20 @@ export function filtrarAsignacionesHoy(
   tickets,
   { busqueda = '', filtro = FILTROS_ASIGNADOS_HOY.TODOS, ahora = new Date() } = {}
 ) {
-  const consulta = normalizar(busqueda)
+  return filtrarAsignaciones(
+    tickets
+      .filter((ticket) => perteneceAlDiaLocal(ticket.fecha_asignacion, ahora))
+      .filter(
+        (ticket) =>
+          filtro === FILTROS_ASIGNADOS_HOY.TODOS || ticket.estado_sync === filtro
+      ),
+    { busqueda }
+  )
+}
 
+export function filtrarAsignaciones(tickets, { busqueda = '' } = {}) {
+  const consulta = normalizar(busqueda)
   return tickets
-    .filter((ticket) => perteneceAlDiaLocal(ticket.fecha_asignacion, ahora))
-    .filter(
-      (ticket) =>
-        filtro === FILTROS_ASIGNADOS_HOY.TODOS || ticket.estado_sync === filtro
-    )
     .filter((ticket) => {
       if (!consulta) return true
 

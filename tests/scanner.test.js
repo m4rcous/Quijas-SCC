@@ -39,6 +39,22 @@ function elemento() {
   }
 }
 
+test('scanner funciona sin insertar panel ni listeners adicionales de diagnóstico', async () => {
+  const form = elemento()
+  const input = elemento()
+  input.ownerDocument = {
+    createElement() {
+      throw new Error('No debe crear diagnóstico')
+    }
+  }
+  const valores = []
+  configurarEnvioScanner(form, input, (dni) => valores.push(dni))
+  input.value = '01748037'
+  form.emitir('submit')
+  await siguienteTurno()
+  assert.deepEqual(valores, ['01748037'])
+})
+
 for (const [descripcion, valor, esperado] of [
   ['ocho dígitos', '17480378', '17480378'],
   ['terminador CR', '17480378\r', '17480378'],

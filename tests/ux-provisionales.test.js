@@ -7,6 +7,8 @@ import { openDB } from 'idb'
 import * as local from '../src/offline/db.js'
 import * as asignados from '../src/modules/asignadosHoy.js'
 import * as jaberos from '../src/modules/jaberosCampania.js'
+import * as cosechadores from '../src/modules/cosechadoresJabas.js'
+import * as sesiones from '../src/modules/sesionesLectura.js'
 import { nombreCosechadorVisible } from '../src/modules/cosechadorLocal.js'
 
 const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf8')
@@ -38,6 +40,7 @@ function element() {
     className: '',
     children: [],
     disabled: false,
+    dataset: {},
     classList: {
       add: (...items) => items.forEach((c) => classes.add(c)),
       remove: (...items) => items.forEach((c) => classes.delete(c)),
@@ -56,6 +59,9 @@ function element() {
       if (!selected.has(selector)) selected.set(selector, element())
       return selected.get(selector)
     },
+    querySelectorAll() {
+      return this.children
+    },
     setAttribute: (name, value) => attributes.set(name, value),
     removeAttribute: (name) => attributes.delete(name),
     getAttribute: (name) => attributes.get(name),
@@ -69,9 +75,6 @@ function consulta(id, consultar = async () => ({ data: base() })) {
   const nodes = Object.fromEntries(
     [
       'tituloConsultaHeader',
-      'tituloConsulta',
-      'descripcionConsulta',
-      'consultaIntroduccion',
       'btnActualizarConsulta',
       'consultaFeedback',
       'consultaBusqueda',
@@ -90,12 +93,19 @@ function consulta(id, consultar = async () => ({ data: base() })) {
     ...local,
     ...asignados,
     ...jaberos,
+    ...cosechadores,
+    ...sesiones,
     nombreCosechadorVisible,
     document: { createElement: element },
     operador: { dni: '47480378' },
     consultaActual: null,
     ticketsConsultaActual: [],
     trabajadoresConsultaActual: [],
+    sesionLectura: null,
+    sesionesConsultaActual: [],
+    cosechadoresJabasActual: [],
+    ordenCosechadoresJabas: cosechadores.ORDEN_COSECHADORES_JABAS.MAS_JABAS,
+    filtroSesionesLectura: sesiones.FILTROS_SESIONES_LECTURA.TODAS,
     navigator: { onLine: true },
     mostrarVista() {},
     supabase: {
@@ -113,7 +123,7 @@ function consulta(id, consultar = async () => ({ data: base() })) {
   vm.runInContext(
     main.slice(
       main.indexOf('async function mostrarConsulta('),
-      main.indexOf('async function prepararConsultaCosechadoresJabas(')
+      main.indexOf('function abrirDetalleSesionLectura(')
     ),
     ctx
   )
@@ -139,11 +149,15 @@ function consulta(id, consultar = async () => ({ data: base() })) {
   }
 }
 
-for (const id of ['asignados-hoy', 'jaberos-campania']) {
+for (const id of [
+  'asignados-hoy',
+  'jaberos-campania',
+  'buscar-asignacion',
+  'buscar-jabero'
+]) {
   test(`${id}: AppBar suficiente, sin introducción ni filtros, con búsqueda y Actualizar`, async () => {
     const vista = consulta(id)
     await vista.abrir()
-    assert.equal(vista.nodes.consultaIntroduccion.classList.contains('oculto'), true)
     assert.equal(vista.nodes.consultaChips.classList.contains('oculto'), true)
     assert.equal(vista.nodes.consultaChips.children.length, 0)
     assert.equal(vista.nodes.btnActualizarConsulta.classList.contains('oculto'), false)
@@ -151,8 +165,11 @@ for (const id of ['asignados-hoy', 'jaberos-campania']) {
     assert.equal(vista.nodes.consultaContador.classList.contains('oculto'), false)
     assert.ok(vista.nodes.tituloConsultaHeader.textContent)
     const bloque = html.slice(html.indexOf('<section id="vista-consulta"'))
+    assert.doesNotMatch(bloque, /<h1|class="eyebrow"|consulta-introduccion/)
     assert.doesNotMatch(bloque, /aria-label="Filtros"|href="#icon-filter"/)
-    const boton = bloque.match(/<button\s+id="btn-actualizar-consulta"[\s\S]*?<\/button>/)[0]
+    const boton = bloque.match(
+      /<button\s+id="btn-actualizar-consulta"[\s\S]*?<\/button>/
+    )[0]
     assert.match(boton, /aria-label="Actualizar"/)
     assert.match(boton, /href="#icon-refresh"/)
     assert.doesNotMatch(boton, />\s*Actualizar\s*</)
@@ -438,4 +455,129 @@ test('fallback de trabajador no sobrescribe un nombre real en tickets al refresc
     base([{ dni: '43829105', nombre: 'DNI 43829105', roles: ['COSECHADOR'] }])
   )
   assert.equal((await local.obtenerTicket('C71048263')).cosechador, 'Fausto Rodríguez')
+})
+
+test('Buscar asignación incluye días anteriores y busca por DNI, nombre o ticket', async () => {
+  const fecha = new Date()
+  fecha.setDate(fecha.getDate() - 1)
+  await local.guardarCache(
+    base(
+      [],
+      [
+        {
+          codigo_ticket: 'AYER-01',
+          cosechador_dni: '43829105',
+          cosechador: 'Fausto Rodríguez',
+          fecha_asignacion: fecha.toISOString()
+        }
+      ]
+    )
+  )
+  const vista = consulta('buscar-asignacion')
+  await vista.abrir()
+  assert.deepEqual(vista.nombres(), ['Fausto Rodríguez'])
+  for (const busqueda of ['43829105', 'fausto', 'ayer-01']) {
+    vista.nodes.consultaBusqueda.value = busqueda
+    vista.ctx.renderAsignadosHoy()
+    assert.deepEqual(vista.nombres(), ['Fausto Rodríguez'])
+  }
+  const hoy = consulta('asignados-hoy')
+  await hoy.abrir()
+  assert.deepEqual(hoy.nombres(), [])
+})
+
+test('Buscar jabero usa la lista local y Actualizar muestra el nombre oficial', async () => {
+  await local.registrarJaberoOffline('47480378', '76338971')
+  const vista = consulta('buscar-jabero', async () => ({
+    data: base([
+      { dni: '76338971', nombre: 'Marco Góngora', roles: ['JABERO'], activo: true }
+    ])
+  }))
+  await vista.abrir()
+  assert.deepEqual(vista.nombres(), ['DNI 76338971'])
+  vista.nodes.consultaBusqueda.value = '76338971'
+  await vista.actualizar()
+  assert.deepEqual(vista.nombres(), ['Marco Góngora'])
+  assert.equal(vista.nodes.consultaBusqueda.value, '76338971')
+})
+
+test('Cosechadores y jabas refresca nombres y conserva el orden operativo', async () => {
+  await local.guardarLecturaLocal({
+    id: 'lectura-test',
+    sesion_id: 'sesion-test',
+    cosechador_dni: '43829105',
+    cosechador: 'DNI 43829105',
+    fecha_hora: new Date().toISOString(),
+    estado_sync: 'PENDIENTE'
+  })
+  const vista = consulta('cosechadores-jabas', async () => ({
+    data: base([{ dni: '43829105', nombre: 'Fausto Rodríguez', roles: ['COSECHADOR'] }])
+  }))
+  vista.ctx.sesionLectura = { sesion_id: 'sesion-test' }
+  await vista.abrir()
+  assert.deepEqual(vista.nombres(), ['DNI 43829105'])
+  assert.equal(vista.nodes.btnActualizarConsulta.classList.contains('oculto'), false)
+  vista.ctx.ordenCosechadoresJabas = cosechadores.ORDEN_COSECHADORES_JABAS.AZ
+  await vista.actualizar()
+  assert.deepEqual(vista.nombres(), ['Fausto Rodríguez'])
+  assert.equal(
+    vista.ctx.ordenCosechadoresJabas,
+    cosechadores.ORDEN_COSECHADORES_JABAS.AZ
+  )
+  assert.equal(
+    vista.nodes.consultaChips.children[2].getAttribute('aria-pressed'),
+    'true'
+  )
+  assert.equal((await local.obtenerLecturasSesion('sesion-test')).length, 1)
+})
+
+test('Sesiones refresca nombres y conserva Activas/Cerradas sin perder lecturas locales', async () => {
+  await local.guardarSesionLocal({
+    id: 'sesion-test',
+    dni_operador: '47480378',
+    dni_jabero: '76338971',
+    jabero: 'DNI 76338971',
+    estado: 'ACTIVA',
+    fecha_inicio: new Date().toISOString()
+  })
+  const vista = consulta('sesiones-lectura', async () => ({
+    data: base([{ dni: '76338971', nombre: 'Marco Góngora', roles: ['JABERO'] }])
+  }))
+  await vista.abrir()
+  vista.ctx.filtroSesionesLectura = sesiones.FILTROS_SESIONES_LECTURA.ACTIVAS
+  await vista.actualizar()
+  assert.deepEqual(vista.nombres(), ['Marco Góngora'])
+  assert.equal(
+    vista.ctx.filtroSesionesLectura,
+    sesiones.FILTROS_SESIONES_LECTURA.ACTIVAS
+  )
+  assert.equal(
+    vista.nodes.consultaChips.children[1].getAttribute('aria-pressed'),
+    'true'
+  )
+  vista.ctx.navigator.onLine = false
+  await vista.actualizar()
+  assert.equal(vista.calls.length, 1)
+  assert.deepEqual(vista.nombres(), ['Marco Góngora'])
+})
+
+test('cada reporte conserva AppBar, contexto de campaña y refresco solo por icono', () => {
+  for (const id of [
+    'vista-reportes',
+    'vista-resumen-campania',
+    'vista-ranking-cosechadores',
+    'vista-produccion-diaria',
+    'vista-produccion-lotes'
+  ]) {
+    const inicio = html.indexOf(`<section id="${id}"`)
+    const bloque = html.slice(inicio, html.indexOf('</section>', inicio))
+    assert.match(bloque, /app-header__title/)
+    assert.doesNotMatch(bloque, /<h1|class="eyebrow"/)
+    if (id === 'vista-reportes') continue
+    assert.match(bloque, /class="report-context"/)
+    const boton = bloque.match(/<button\s+id="btn-actualizar-[\s\S]*?<\/button>/)[0]
+    assert.match(boton, /href="#icon-refresh"/)
+    assert.match(boton, /aria-label="Actualizar/)
+    assert.doesNotMatch(boton, />\s*Actualizar\s*</)
+  }
 })

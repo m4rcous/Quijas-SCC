@@ -38,6 +38,7 @@ import {
   mostrarSesionLecturaEnVista
 } from './modules/vistaSesionLectura'
 import {
+  filtrarAsignaciones,
   filtrarAsignacionesHoy,
   formatearHoraAsignacion,
   obtenerBadgeEstadoAsignacion
@@ -230,8 +231,6 @@ const contextOptions = document.querySelector('#context-options')
 const btnCerrarContexto = document.querySelector('#btn-cerrar-contexto')
 const btnVolverConsulta = document.querySelector('#btn-volver-consulta')
 const tituloConsultaHeader = document.querySelector('#titulo-consulta-header')
-const tituloConsulta = document.querySelector('#titulo-consulta')
-const descripcionConsulta = document.querySelector('#descripcion-consulta')
 const consultaBusqueda = document.querySelector('#consulta-busqueda')
 const consultaChips = document.querySelector('#consulta-chips')
 const consultaTablaHead = document.querySelector('#consulta-tabla-head')
@@ -239,7 +238,6 @@ const consultaTablaBody = document.querySelector('#consulta-tabla-body')
 const consultaEmpty = document.querySelector('#consulta-empty')
 const consultaEmptyAccion = document.querySelector('#consulta-empty-accion')
 const consultaContador = document.querySelector('#consulta-contador')
-const consultaIntroduccion = document.querySelector('#consulta-introduccion')
 const btnActualizarConsulta = document.querySelector('#btn-actualizar-consulta')
 const consultaFeedback = document.querySelector('#consulta-feedback')
 
@@ -257,6 +255,7 @@ const consultasContextuales = {
         vacio: 'No hay tickets asignados hoy.'
       },
       {
+        id: 'buscar-asignacion',
         etiqueta: 'Buscar asignación',
         titulo: 'Buscar asignación',
         descripcion: 'Busque por cosechador o código de ticket.',
@@ -279,6 +278,7 @@ const consultasContextuales = {
         vacio: 'No hay jaberos registrados en esta campaña.'
       },
       {
+        id: 'buscar-jabero',
         etiqueta: 'Buscar',
         titulo: 'Buscar jabero',
         descripcion: 'Busque personal registrado en la campaña.',
@@ -433,11 +433,7 @@ function cerrarMenuContextual() {
 async function mostrarConsulta(configuracion) {
   consultaActual = configuracion
   tituloConsultaHeader.textContent = configuracion.titulo
-  tituloConsulta.textContent = configuracion.titulo
-  descripcionConsulta.textContent = configuracion.descripcion ?? ''
-  const actualizable = ['asignados-hoy', 'jaberos-campania'].includes(configuracion.id)
-  consultaIntroduccion.classList.toggle('oculto', actualizable)
-  btnActualizarConsulta.classList.toggle('oculto', !actualizable)
+  btnActualizarConsulta.classList.remove('oculto')
   consultaFeedback.textContent = ''
   consultaFeedback.classList.add('oculto')
   consultaBusqueda.value = ''
@@ -446,14 +442,14 @@ async function mostrarConsulta(configuracion) {
   consultaChips.classList.remove('oculto', 'filter-chips--wrap')
   consultaEmptyAccion.classList.add('oculto')
 
-  if (configuracion.id === 'asignados-hoy') {
+  if (['asignados-hoy', 'buscar-asignacion'].includes(configuracion.id)) {
     await prepararConsultaAsignadosHoy()
     mostrarVista(vistaConsulta)
     consultaBusqueda.focus()
     return
   }
 
-  if (configuracion.id === 'jaberos-campania') {
+  if (['jaberos-campania', 'buscar-jabero'].includes(configuracion.id)) {
     await prepararConsultaJaberosCampania()
     mostrarVista(vistaConsulta)
     consultaBusqueda.focus()
@@ -474,44 +470,7 @@ async function mostrarConsulta(configuracion) {
     return
   }
 
-  consultaBusqueda.placeholder = `Buscar en ${configuracion.titulo.toLowerCase()}...`
-
-  consultaChips.replaceChildren()
-  configuracion.chips.forEach((chip, indice) => {
-    const boton = document.createElement('button')
-    boton.type = 'button'
-    boton.className = `filter-chip${indice === 0 ? ' selected' : ''}`
-    boton.textContent = chip
-    boton.setAttribute('aria-pressed', String(indice === 0))
-    boton.addEventListener('click', () => {
-      consultaChips.querySelectorAll('.filter-chip').forEach((item) => {
-        const seleccionado = item === boton
-        item.classList.toggle('selected', seleccionado)
-        item.setAttribute('aria-pressed', String(seleccionado))
-      })
-    })
-    consultaChips.append(boton)
-  })
-
-  consultaTablaHead.replaceChildren()
-  const columnasNumericas = configuracion.columnasNumericas ?? []
-  configuracion.columnas.forEach((columna) => {
-    const th = document.createElement('th')
-    th.scope = 'col'
-    th.textContent = columna
-    if (columnasNumericas.includes(columna)) {
-      th.classList.add('industrial-table__numeric')
-    }
-    consultaTablaHead.append(th)
-  })
-  consultaTablaBody.replaceChildren()
-  consultaEmpty.querySelector('strong').textContent = configuracion.vacio
-  consultaEmpty.querySelector('p').textContent =
-    'La estructura visual está lista para conectarse cuando exista la consulta de datos.'
-  consultaEmpty.classList.remove('oculto')
-
-  mostrarVista(vistaConsulta)
-  consultaBusqueda.focus()
+  throw new Error('Consulta no disponible.')
 }
 
 async function prepararConsultaAsignadosHoy() {
@@ -533,8 +492,10 @@ async function prepararConsultaAsignadosHoy() {
 }
 
 function renderAsignadosHoy() {
-  const asignacionesDelDia = filtrarAsignacionesHoy(ticketsConsultaActual)
-  const asignaciones = filtrarAsignacionesHoy(ticketsConsultaActual, {
+  const esBusquedaGeneral = consultaActual?.id === 'buscar-asignacion'
+  const filtrar = esBusquedaGeneral ? filtrarAsignaciones : filtrarAsignacionesHoy
+  const asignacionesDisponibles = filtrar(ticketsConsultaActual)
+  const asignaciones = filtrar(ticketsConsultaActual, {
     busqueda: consultaBusqueda.value
   })
 
@@ -585,10 +546,12 @@ function renderAsignadosHoy() {
     return
   }
 
-  const sinResultados = asignacionesDelDia.length > 0
+  const sinResultados = asignacionesDisponibles.length > 0
   consultaEmpty.querySelector('strong').textContent = sinResultados
     ? 'No se encontraron asignaciones.'
-    : 'No hay tickets asignados hoy.'
+    : esBusquedaGeneral
+      ? 'No hay asignaciones para mostrar.'
+      : 'No hay tickets asignados hoy.'
   consultaEmpty.querySelector('p').textContent = sinResultados
     ? 'Pruebe otra búsqueda.'
     : 'Las nuevas asignaciones aparecerán aquí, incluso si se crean sin conexión.'
@@ -669,10 +632,10 @@ function renderJaberosCampania() {
   consultaEmpty.classList.remove('oculto')
 }
 
-async function prepararConsultaCosechadoresJabas() {
+async function prepararConsultaCosechadoresJabas({ conservarFiltros = false } = {}) {
   consultaBusqueda.placeholder = 'Buscar nombre o DNI...'
   consultaChips.classList.add('filter-chips--wrap')
-  ordenCosechadoresJabas = ORDEN_COSECHADORES_JABAS.MAS_JABAS
+  if (!conservarFiltros) ordenCosechadoresJabas = ORDEN_COSECHADORES_JABAS.MAS_JABAS
 
   const filtros = [
     ['Más jabas', ORDEN_COSECHADORES_JABAS.MAS_JABAS],
@@ -681,13 +644,13 @@ async function prepararConsultaCosechadoresJabas() {
   ]
 
   consultaChips.replaceChildren()
-  filtros.forEach(([etiqueta, valor], indice) => {
+  filtros.forEach(([etiqueta, valor]) => {
     const boton = document.createElement('button')
     boton.type = 'button'
-    boton.className = `filter-chip${indice === 0 ? ' selected' : ''}`
+    boton.className = `filter-chip${valor === ordenCosechadoresJabas ? ' selected' : ''}`
     boton.textContent = etiqueta
     boton.dataset.orden = valor
-    boton.setAttribute('aria-pressed', String(indice === 0))
+    boton.setAttribute('aria-pressed', String(valor === ordenCosechadoresJabas))
     boton.addEventListener('click', () => {
       ordenCosechadoresJabas = valor
       consultaChips.querySelectorAll('.filter-chip').forEach((item) => {
@@ -792,19 +755,32 @@ function renderCosechadoresJabas() {
   consultaEmpty.classList.remove('oculto')
 }
 
-async function prepararConsultaSesionesLectura() {
+async function prepararConsultaSesionesLectura({ conservarFiltros = false } = {}) {
   consultaBusqueda.placeholder = 'Buscar jabero, DNI, lote o variedad...'
   consultaBusqueda.disabled = false
   consultaChips.classList.remove('oculto', 'filter-chips--wrap')
   consultaEmptyAccion.classList.add('oculto')
-  filtroSesionesLectura = FILTROS_SESIONES_LECTURA.TODAS
+  if (!conservarFiltros) filtroSesionesLectura = FILTROS_SESIONES_LECTURA.TODAS
 
-  const sesiones = await obtenerSesionesOperador(operador.dni)
+  const [sesiones, trabajadores] = await Promise.all([
+    obtenerSesionesOperador(operador.dni),
+    obtenerTrabajadores()
+  ])
+  const nombresPorDni = new Map(trabajadores.map((t) => [t.dni, t.nombre]))
   sesionesConsultaActual = await Promise.all(
     sesiones.map(async (sesion) => {
       const sesionId = sesion.id ?? sesion.sesion_id
       const lecturas = sesionId ? await obtenerLecturasSesion(sesionId) : []
-      return enriquecerSesionLectura(sesion, lecturas)
+      return enriquecerSesionLectura(
+        {
+          ...sesion,
+          jabero: nombreCosechadorVisible(
+            nombresPorDni.get(sesion.dni_jabero) || sesion.jabero,
+            sesion.dni_jabero
+          )
+        },
+        lecturas
+      )
     })
   )
 
@@ -815,13 +791,13 @@ async function prepararConsultaSesionesLectura() {
   ]
 
   consultaChips.replaceChildren()
-  filtros.forEach(([etiqueta, valor], indice) => {
+  filtros.forEach(([etiqueta, valor]) => {
     const boton = document.createElement('button')
     boton.type = 'button'
-    boton.className = `filter-chip${indice === 0 ? ' selected' : ''}`
+    boton.className = `filter-chip${valor === filtroSesionesLectura ? ' selected' : ''}`
     boton.textContent = etiqueta
     boton.dataset.filtro = valor
-    boton.setAttribute('aria-pressed', String(indice === 0))
+    boton.setAttribute('aria-pressed', String(valor === filtroSesionesLectura))
     boton.addEventListener('click', () => {
       filtroSesionesLectura = valor
       consultaChips.querySelectorAll('.filter-chip').forEach((item) => {
@@ -1492,19 +1468,37 @@ function formatearNumero(valor) {
 async function actualizarConsultaOperativa() {
   if (btnActualizarConsulta.disabled || !operador) return
   const consulta = consultaActual
-  if (!['asignados-hoy', 'jaberos-campania'].includes(consulta?.id)) return
+  if (
+    ![
+      'asignados-hoy',
+      'buscar-asignacion',
+      'jaberos-campania',
+      'buscar-jabero',
+      'cosechadores-jabas',
+      'sesiones-lectura'
+    ].includes(consulta?.id)
+  )
+    return
   btnActualizarConsulta.disabled = true
   btnActualizarConsulta.setAttribute('aria-busy', 'true')
   consultaFeedback.classList.add('oculto')
   try {
-    if (!navigator.onLine) {
+    if (
+      !navigator.onLine &&
+      !['cosechadores-jabas', 'sesiones-lectura'].includes(consulta.id)
+    ) {
       throw new Error('Sin conexión. Conéctese para actualizar los datos.')
     }
-    await actualizarCacheOperativa(operador.dni)
+    if (navigator.onLine) await actualizarCacheOperativa(operador.dni)
     if (consultaActual !== consulta || vistaConsulta.classList.contains('oculto'))
       return
-    if (consulta.id === 'asignados-hoy') await prepararConsultaAsignadosHoy()
-    else await prepararConsultaJaberosCampania()
+    if (['asignados-hoy', 'buscar-asignacion'].includes(consulta.id))
+      await prepararConsultaAsignadosHoy()
+    else if (['jaberos-campania', 'buscar-jabero'].includes(consulta.id))
+      await prepararConsultaJaberosCampania()
+    else if (consulta.id === 'cosechadores-jabas')
+      await prepararConsultaCosechadoresJabas({ conservarFiltros: true })
+    else await prepararConsultaSesionesLectura({ conservarFiltros: true })
   } catch (error) {
     if (consultaActual !== consulta || vistaConsulta.classList.contains('oculto'))
       return
@@ -1520,8 +1514,10 @@ async function actualizarConsultaOperativa() {
 btnActualizarConsulta.addEventListener('click', actualizarConsultaOperativa)
 
 consultaBusqueda.addEventListener('input', () => {
-  if (consultaActual?.id === 'asignados-hoy') renderAsignadosHoy()
-  if (consultaActual?.id === 'jaberos-campania') renderJaberosCampania()
+  if (['asignados-hoy', 'buscar-asignacion'].includes(consultaActual?.id))
+    renderAsignadosHoy()
+  if (['jaberos-campania', 'buscar-jabero'].includes(consultaActual?.id))
+    renderJaberosCampania()
   if (consultaActual?.id === 'cosechadores-jabas') renderCosechadoresJabas()
   if (consultaActual?.id === 'sesiones-lectura') renderSesionesLectura()
 })

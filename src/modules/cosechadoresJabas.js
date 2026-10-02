@@ -64,7 +64,7 @@ export function agruparLecturasPorCosechador(lecturas, trabajadores = []) {
 
   return [...grupos.values()].map((grupo) => ({
     ...grupo,
-    nombre: grupo.nombre || nombresPorDni.get(grupo.dni)?.trim() || grupo.dni
+    nombre: nombresPorDni.get(grupo.dni)?.trim() || grupo.nombre || grupo.dni
   }))
 }
 

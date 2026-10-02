@@ -1,5 +1,3 @@
-import { configurarDiagnosticoScanner } from './diagnosticoScanner.js'
-
 export function normalizarValorScanner(valor) {
   return String(valor ?? '').trim()
 }
@@ -26,7 +24,6 @@ function esSaltoDeLinea(event) {
 }
 
 export function configurarEnvioScanner(formulario, input, procesar) {
-  const diagnostico = configurarDiagnosticoScanner(formulario, input)
   let pendiente = false
   let temporizador
   let operacionActual = null
@@ -46,7 +43,6 @@ export function configurarEnvioScanner(formulario, input, procesar) {
         if (operacionActual === operacion) operacionActual = null
       }
       try {
-        diagnostico.registrar('procesar', input.value)
         await procesar(normalizarValorScanner(input.value), liberar)
       } finally {
         liberar()

@@ -18,6 +18,11 @@ export async function obtenerProduccionDiaria(
   })
 
   if (error) {
+    if (error.code === 'PGRST202') {
+      throw new Error(
+        'Producción por día no está disponible. Solicite a Administración que habilite el reporte.'
+      )
+    }
     throw new Error(error.message || 'No se pudo obtener la producción diaria.')
   }
 

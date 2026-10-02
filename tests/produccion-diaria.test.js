@@ -119,6 +119,20 @@ test('propaga el error de la RPC', async () => {
   )
 })
 
+test('RPC ausente informa que Administración debe habilitar el reporte', async () => {
+  const rpc = async () => ({
+    data: null,
+    error: {
+      code: 'PGRST202',
+      message: 'Could not find the function in the schema cache'
+    }
+  })
+  await assert.rejects(
+    obtenerProduccionDiaria('12345678', rpc, () => 'America/Lima'),
+    /Solicite a Administración que habilite el reporte/
+  )
+})
+
 test('el resumen no suma cosechadores diarios como cosechadores únicos de campaña', () => {
   const produccion = normalizarProduccionDiaria(respuestaBase).produccion
   const resumen = resumirProduccionDiaria(produccion)
@@ -133,7 +147,10 @@ test('la migración conserva las reglas de conteo y timezone', async () => {
   )
 
   assert.match(sql, /count\(lj\.id\)::bigint as total_jabas/i)
-  assert.match(sql, /count\(distinct at\.cosechador_rol_id\)::bigint as total_cosechadores/i)
+  assert.match(
+    sql,
+    /count\(distinct at\.cosechador_rol_id\)::bigint as total_cosechadores/i
+  )
   assert.match(sql, /count\(distinct lj\.sesion_id\)::bigint as total_sesiones/i)
   assert.match(sql, /lj\.fecha_hora at time zone v_zona_horaria/i)
   assert.match(sql, /where at\.campania_id = v_campania_id/i)
