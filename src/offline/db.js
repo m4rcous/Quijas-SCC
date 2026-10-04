@@ -567,8 +567,10 @@ export async function registrarJaberoOffline(dniOperador, dniTrabajador) {
       'El jabero no está disponible para registrar. Revise su estado de sincronización.'
     )
   }
-  if (trabajadorActual?.roles?.includes('JABERO')) {
-    throw new Error('El trabajador ya está registrado como jabero.')
+  if (trabajadorActual?.estado_sync_jabero === 'PENDIENTE') {
+    throw new Error(
+      'El trabajador ya está registrado como jabero. Su asignación está pendiente de sincronizar.'
+    )
   }
   const trabajador = trabajadorActual ?? {
     dni: dniTrabajador,
@@ -581,7 +583,7 @@ export async function registrarJaberoOffline(dniOperador, dniTrabajador) {
     dniOperador,
     dniTrabajador
   })
-  trabajador.roles = [...(trabajador.roles ?? []), 'JABERO']
+  trabajador.roles = [...new Set([...(trabajador.roles ?? []), 'JABERO'])]
   trabajador.estado_sync_jabero = 'PENDIENTE'
   trabajador.operacion_jabero_id = operacion.id
   await tx.objectStore('trabajadores').put(trabajador)

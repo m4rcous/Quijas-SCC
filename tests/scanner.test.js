@@ -519,6 +519,23 @@ test('INICIAR LECTURA también espera el DNI del jabero y conserva el cero', asy
   assert.equal(continuaciones, 1)
 })
 
+test('INICIAR LECTURA sin DNI pide ingresar DNI antes de validar lote', async () => {
+  const errores = []
+  const vista = formularioSimulado(
+    'formIniciarLectura',
+    'dniJaberoLectura',
+    'configurarEnvioScanner(formLecturaTicket,',
+    {
+      loteLectura: { value: '' },
+      mostrarMensajeLectura: (mensaje) => errores.push(mensaje)
+    }
+  )
+  vista.input.value = '   '
+  vista.form.emitir('submit', {})
+  await siguienteTurno()
+  assert.deepEqual(errores, ['Ingresar DNI.'])
+})
+
 test('ASIGNAR TICKET permite otro ticket aunque la sincronización anterior siga pendiente', async () => {
   const asignaciones = []
   const sincronizaciones = []

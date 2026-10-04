@@ -205,23 +205,20 @@
             <svg aria-hidden="true"><use href="#icon-arrow-left"></use></svg>
           </button>
           <div class="app-header__title">Resumen de campaña</div>
-          <span class="app-header__spacer"></span>
+          <button
+            id="btn-actualizar-resumen"
+            type="button"
+            class="icon-button btn-secondary"
+            aria-label="Actualizar resumen de campaña"
+            title="Actualizar"
+          >
+            <svg aria-hidden="true"><use href="#icon-refresh"></use></svg>
+          </button>
         </header>
         <div class="contenido contenido-datos">
           <div class="report-context">
             <p id="resumen-campania-nombre">Campaña activa</p>
             <p id="resumen-campania-fecha" class="resumen-campania__fecha oculto"></p>
-          </div>
-          <div class="report-toolbar">
-            <button
-              id="btn-actualizar-resumen"
-              type="button"
-              class="icon-button btn-secondary"
-              aria-label="Actualizar resumen de campaña"
-              title="Actualizar"
-            >
-              <svg aria-hidden="true"><use href="#icon-refresh"></use></svg>
-            </button>
           </div>
           <div
             id="resumen-campania-feedback"
@@ -287,6 +284,18 @@
           <div class="report-context">
             <p id="ranking-campania">Campaña activa</p>
           </div>
+          <label class="ranking-periodo" for="ranking-periodo">
+            Período
+            <select id="ranking-periodo" class="select-grande">
+              <option value="HOY">Hoy</option>
+              <option value="SEMANA">Esta semana</option>
+              <option value="MES">Este mes</option>
+              <option value="CAMPANIA">Toda la campaña</option>
+            </select>
+          </label>
+          <p class="report-note">
+            Semana desde el lunes. Fechas de Perú. Solo lecturas sincronizadas.
+          </p>
           <div class="filter-bar">
             <label class="search-field" for="ranking-busqueda">
               <svg aria-hidden="true"><use href="#icon-search"></use></svg>
@@ -331,7 +340,7 @@
               <span class="empty-state__icon"
                 ><svg aria-hidden="true"><use href="#icon-search"></use></svg
               ></span>
-              <strong>Aún no hay jabas registradas en esta campaña.</strong>
+              <strong>Aún no hay jabas registradas en este período.</strong>
               <p>Las lecturas sincronizadas aparecerán aquí.</p>
             </div>
           </div>
@@ -354,6 +363,10 @@
           <div class="report-context">
             <p id="produccion-campania">Campaña activa</p>
           </div>
+          <p class="report-note">
+            Compare las jabas y los cosechadores con producción de cada día. Solo
+            lecturas sincronizadas.
+          </p>
           <div class="report-toolbar">
             <button
               id="btn-actualizar-produccion"

@@ -6,7 +6,7 @@ import { validarOperadorConFuentes } from './authLogic'
 export async function validarOperador(dni) {
   return validarOperadorConFuentes(
     dni,
-    (valor) => supabase.rpc('validar_operador', { p_dni: valor }),
+    (valor) => supabase.rpc('validar_operador_diario', { p_dni: valor }),
     obtenerOperador,
     guardarOperador
   )

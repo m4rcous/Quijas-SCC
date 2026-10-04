@@ -1,6 +1,7 @@
 import './style.css'
 import { supabase } from './supabase'
 import { validarOperador } from './modules/auth'
+import { autorizacionOperadorVigente } from './modules/fechaOperativa'
 import { buscarCosechador } from './modules/asignacionTickets'
 import { nombreCosechadorVisible } from './modules/cosechadorLocal'
 import { actualizarCacheOperativa } from './modules/cacheOperativa'
@@ -32,7 +33,10 @@ import {
 import { sincronizarPendientes } from './offline/sync'
 import { evaluarDescarteOperacion } from './offline/cola'
 import { configurarTecladoManual } from './modules/tecladoManual'
-import { configurarEnvioScanner, esDniValido } from './modules/scanner'
+import {
+  configurarEnvioScanner as configurarScanner,
+  esDniValido
+} from './modules/scanner'
 import { configurarConfirmacion } from './modules/confirmacion'
 import {
   mostrarContadorCosechador,
@@ -156,6 +160,7 @@ const btnVolverRanking = document.querySelector('#btn-volver-ranking')
 const btnActualizarRanking = document.querySelector('#btn-actualizar-ranking')
 const rankingCampania = document.querySelector('#ranking-campania')
 const rankingBusqueda = document.querySelector('#ranking-busqueda')
+const rankingPeriodo = document.querySelector('#ranking-periodo')
 const rankingResumen = document.querySelector('#ranking-resumen')
 const rankingFeedback = document.querySelector('#ranking-feedback')
 const rankingTablaBody = document.querySelector('#ranking-tabla-body')
@@ -258,6 +263,7 @@ const consultasContextuales = {
         id: 'asignados-hoy',
         etiqueta: 'Asignados hoy',
         titulo: 'Asignados hoy',
+        descripcion: 'Tickets asignados durante el día de hoy.',
         columnas: ['Cosechador', 'Ticket', 'Hora'],
         vacio: 'No hay tickets asignados hoy.'
       },
@@ -265,7 +271,7 @@ const consultasContextuales = {
         id: 'buscar-asignacion',
         etiqueta: 'Buscar asignación',
         titulo: 'Buscar asignación',
-        descripcion: 'Busque por cosechador o código de ticket.',
+        descripcion: 'Incluye días anteriores. Busque por DNI, nombre o ticket.',
         columnas: ['Cosechador', 'Ticket', 'Hora'],
         chips: ['Todos'],
         vacio: 'No hay asignaciones para mostrar.'
@@ -281,17 +287,9 @@ const consultasContextuales = {
         id: 'jaberos-campania',
         etiqueta: 'Jaberos de campaña',
         titulo: 'Jaberos de campaña',
+        descripcion: 'Listado de campaña con búsqueda por nombre o DNI.',
         columnas: ['Jabero', 'DNI', 'Estado'],
         vacio: 'No hay jaberos registrados en esta campaña.'
-      },
-      {
-        id: 'buscar-jabero',
-        etiqueta: 'Buscar',
-        titulo: 'Buscar jabero',
-        descripcion: 'Busque personal registrado en la campaña.',
-        columnas: ['Jabero', 'DNI', 'Estado'],
-        chips: ['Todos'],
-        vacio: 'No hay jaberos para mostrar.'
       }
     ]
   },
@@ -487,11 +485,13 @@ async function prepararConsultaAsignadosHoy() {
   consultaChips.classList.add('oculto')
 
   consultaTablaHead.replaceChildren()
-  for (const columna of ['Cosechador', 'Ticket', 'Hora']) {
+  const columnaFecha =
+    consultaActual?.id === 'buscar-asignacion' ? 'Fecha / hora' : 'Hora'
+  for (const columna of ['Cosechador', 'Ticket', columnaFecha]) {
     const th = document.createElement('th')
     th.scope = 'col'
     th.textContent = columna
-    if (columna === 'Hora') th.classList.add('industrial-table__numeric')
+    if (columna === columnaFecha) th.classList.add('industrial-table__numeric')
     consultaTablaHead.append(th)
   }
 
@@ -539,6 +539,21 @@ function renderAsignadosHoy() {
     const horaCell = document.createElement('td')
     horaCell.className = 'industrial-table__numeric industrial-table__time'
     horaCell.textContent = formatearHoraAsignacion(ticket.fecha_asignacion)
+    if (esBusquedaGeneral) {
+      const fecha = new Date(ticket.fecha_asignacion)
+      if (!Number.isNaN(fecha.getTime())) {
+        const dia = document.createElement('span')
+        dia.textContent = new Intl.DateTimeFormat('es-PE', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
+        }).format(fecha)
+        const hora = document.createElement('span')
+        hora.textContent = horaCell.textContent
+        horaCell.textContent = ''
+        horaCell.append(dia, hora)
+      }
+    }
 
     fila.append(cosechadorCell, ticketCell, horaCell)
     consultaTablaBody.append(fila)
@@ -1069,6 +1084,7 @@ function ocultarFeedbackResumenCampania() {
 }
 
 async function abrirRankingCosechadores() {
+  rankingPeriodo.value = 'HOY'
   rankingBusqueda.value = ''
   rankingCosechadoresActual = []
   rankingCampania.textContent = 'Campaña activa'
@@ -1081,19 +1097,23 @@ async function abrirRankingCosechadores() {
 }
 
 async function cargarRankingCosechadores() {
+  if (btnActualizarRanking.disabled) return
   btnActualizarRanking.disabled = true
+  rankingPeriodo.disabled = true
   mostrarFeedbackRanking('Cargando ranking…')
 
   if (!navigator.onLine) {
     mostrarFeedbackRanking('No se puede actualizar el ranking sin conexión.', 'error')
     btnActualizarRanking.disabled = false
+    rankingPeriodo.disabled = false
     return
   }
 
   try {
     const respuesta = await obtenerRankingCosechadores(
       operador.dni,
-      (nombre, parametros) => supabase.rpc(nombre, parametros)
+      (nombre, parametros) => supabase.rpc(nombre, parametros),
+      rankingPeriodo.value
     )
     rankingCosechadoresActual = reemplazarRankingCosechadores(
       rankingCosechadoresActual,
@@ -1115,6 +1135,7 @@ async function cargarRankingCosechadores() {
     }
   } finally {
     btnActualizarRanking.disabled = false
+    rankingPeriodo.disabled = false
   }
 }
 
@@ -1167,7 +1188,7 @@ function renderRankingCosechadores() {
   const hayBusqueda = rankingBusqueda.value.trim().length > 0
   rankingEmpty.querySelector('strong').textContent = hayBusqueda
     ? 'No se encontraron cosechadores.'
-    : 'Aún no hay jabas registradas en esta campaña.'
+    : 'Aún no hay jabas registradas en este período.'
   rankingEmpty.querySelector('p').textContent = hayBusqueda
     ? 'Pruebe con otro nombre o DNI.'
     : 'Las lecturas sincronizadas aparecerán aquí.'
@@ -1530,6 +1551,13 @@ consultaBusqueda.addEventListener('input', () => {
 })
 
 rankingBusqueda.addEventListener('input', renderRankingCosechadores)
+rankingPeriodo.addEventListener('change', () => {
+  rankingCosechadoresActual = []
+  rankingResumen.classList.add('oculto')
+  rankingTablaBody.replaceChildren()
+  rankingEmpty.classList.add('oculto')
+  cargarRankingCosechadores()
+})
 btnActualizarRanking.addEventListener('click', cargarRankingCosechadores)
 btnActualizarResumen.addEventListener('click', cargarResumenCampania)
 btnReintentarResumen.addEventListener('click', cargarResumenCampania)
@@ -1559,13 +1587,44 @@ window.addEventListener('online', async () => {
 
 window.addEventListener('offline', actualizarEstadoConexion)
 window.addEventListener('focus', () => {
+  if (operador && !verificarVigenciaOperador()) return
   if (navigator.onLine)
     sincronizarPendientes().then(actualizarEstadoConexion).catch(console.error)
 })
 setInterval(() => {
+  if (operador && !verificarVigenciaOperador()) return
   if (navigator.onLine)
     sincronizarPendientes().then(actualizarEstadoConexion).catch(console.error)
 }, 30000)
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && operador) verificarVigenciaOperador()
+})
+
+document.addEventListener(
+  'click',
+  (event) => {
+    if (operador && !verificarVigenciaOperador()) {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+    }
+  },
+  true
+)
+
+function verificarVigenciaOperador() {
+  if (!operador) return false
+  if (autorizacionOperadorVigente(operador)) return true
+  mostrarVista(vistaLogin)
+  return false
+}
+
+function configurarEnvioScanner(formulario, input, procesar) {
+  return configurarScanner(formulario, input, async (...argumentos) => {
+    if (formulario !== formLogin && !verificarVigenciaOperador()) return
+    return procesar(...argumentos)
+  })
+}
 
 // LOGIN
 
@@ -1863,10 +1922,6 @@ configurarEnvioScanner(formJabero, dniJaberoInput, async (dni, liberar) => {
   try {
     const trabajador = await obtenerTrabajador(dni)
 
-    if (trabajador?.roles?.includes('JABERO')) {
-      throw new Error('El trabajador ya está registrado como jabero.')
-    }
-
     await registrarJaberoOffline(operador.dni, dni)
 
     mostrarResultadoJabero(
@@ -1896,6 +1951,12 @@ configurarEnvioScanner(formJabero, dniJaberoInput, async (dni, liberar) => {
 // NAVEGACIÓN
 
 function mostrarVista(vista) {
+  if (operador && !autorizacionOperadorVigente(operador)) {
+    operador = null
+    sessionStorage.removeItem('operador_dni')
+    vista = vistaLogin
+    mostrarErrorLogin('La autorización venció. Ingrese con una asignación de hoy.')
+  }
   desactivarTecladoManual()
   cerrarMenuContextual()
   vistaLogin.classList.add('oculto')
@@ -1914,6 +1975,7 @@ function mostrarVista(vista) {
 }
 
 function mostrarMenu() {
+  if (!verificarVigenciaOperador()) return
   mostrarVista(vistaMenu)
   menuOperador.textContent = operador.nombre
   actualizarEstadoConexion()
@@ -2071,6 +2133,11 @@ async function cargarLotes() {
 }
 
 configurarEnvioScanner(formIniciarLectura, dniJaberoLectura, async (dni) => {
+  if (!dni) {
+    mostrarMensajeLectura('Ingresar DNI.', 'error')
+    dniJaberoLectura.focus()
+    return
+  }
   const loteId = loteLectura.value
   if (!loteId) {
     mostrarMensajeLectura('Seleccione un lote.', 'error')

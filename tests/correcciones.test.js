@@ -9,6 +9,7 @@ import {
 } from '../src/offline/cola.js'
 import { esErrorTemporal } from '../src/offline/errores.js'
 import { validarOperadorConFuentes } from '../src/modules/authLogic.js'
+import { fechaOperativa } from '../src/modules/fechaOperativa.js'
 import { buscarCosechadorLocal } from '../src/modules/cosechadorLocal.js'
 import { archivoExcluido, contenidoSensible } from '../scripts/filtros-exportacion.js'
 import {
@@ -208,7 +209,11 @@ test('jabero sincronizado confirmado por servidor conserva el rol al recargar ca
 })
 
 test('login usa caché únicamente para fallo de red', async () => {
-  const local = async () => ({ dni: '12345678', nombre: 'Operador' })
+  const local = async () => ({
+    dni: '12345678',
+    nombre: 'Operador',
+    autorizado_para_fecha: fechaOperativa()
+  })
   const guardar = async () => {
     throw new Error('No debe guardar')
   }

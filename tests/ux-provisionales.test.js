@@ -282,6 +282,22 @@ test('jabero nuevo offline crea provisional y una operación; escaneo repetido n
   assert.equal((await local.obtenerColaCompleta()).length, 1)
 })
 
+test('un jabero de campaña puede reasignarse sin duplicar el rol local', async () => {
+  await local.guardarCache(
+    base([{ dni: '76338971', nombre: 'Marco', activo: true, roles: ['JABERO'] }])
+  )
+  const primera = await local.registrarJaberoOffline('47480378', '76338971')
+  await local.marcarJabero('76338971', 'SINCRONIZADO', primera.id)
+  await local.marcarOperacionSincronizada(primera.id)
+  const segunda = await local.registrarJaberoOffline('47480378', '76338971')
+  assert.notEqual(primera.id, segunda.id)
+  assert.deepEqual((await local.obtenerTrabajador('76338971')).roles, ['JABERO'])
+  assert.equal(
+    (await local.obtenerTrabajador('76338971')).estado_sync_jabero,
+    'PENDIENTE'
+  )
+})
+
 for (const estado of ['PENDIENTE', 'ERROR']) {
   test(`refresco conserva jabero ${estado} ausente del servidor; nombre oficial reemplaza fallback`, async () => {
     const op = await local.registrarJaberoOffline('47480378', '76338971')

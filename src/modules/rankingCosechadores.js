@@ -1,14 +1,22 @@
-export async function obtenerRankingCosechadores(dniOperador, rpc) {
+export async function obtenerRankingCosechadores(dniOperador, rpc, periodo = 'HOY') {
   if (typeof rpc !== 'function') {
     throw new Error('No se configuró el cliente RPC para obtener el ranking.')
   }
 
-  const { data, error } = await rpc('obtener_ranking_cosechadores', {
-    p_dni_operador: dniOperador
+  if (!['HOY', 'SEMANA', 'MES', 'CAMPANIA'].includes(periodo)) {
+    throw new Error('Período de ranking inválido.')
+  }
+  const { data, error } = await rpc('obtener_ranking_cosechadores_periodo', {
+    p_dni_operador: dniOperador,
+    p_periodo: periodo
   })
 
   if (error) {
-    throw new Error(error.message || 'No se pudo obtener el ranking de cosechadores.')
+    throw new Error(
+      error.code === 'PGRST202'
+        ? 'El ranking por período requiere actualizar el sistema en Supabase.'
+        : error.message || 'No se pudo obtener el ranking de cosechadores.'
+    )
   }
 
   return normalizarRankingCosechadores(data)

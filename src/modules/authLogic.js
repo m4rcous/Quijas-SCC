@@ -1,4 +1,5 @@
 import { esErrorTemporal } from '../offline/errores.js'
+import { autorizacionOperadorVigente } from './fechaOperativa.js'
 
 export async function validarOperadorConFuentes(
   dni,
@@ -12,22 +13,35 @@ export async function validarOperadorConFuentes(
       throw new Error(
         'Este operador no está disponible sin conexión. Conéctese a Internet al menos una vez para validar el dispositivo.'
       )
-    return { ...local, offline: true }
+    return validarLocal(local)
   }
   try {
     const { data, error } = await consultar(dni)
     if (error) throw error
     if (!data?.dni) throw new Error('El servidor no autorizó al operador.')
+    if (!autorizacionOperadorVigente(data)) {
+      throw new Error('La autorización del operador no corresponde al día de hoy.')
+    }
     await guardarLocal({
       dni: data.dni,
       nombre: data.nombre,
+      autorizado_para_fecha: data.autorizado_para_fecha,
       actualizado_en: new Date().toISOString()
     })
     return data
   } catch (error) {
     if (!esErrorTemporal(error)) throw error
     const local = await obtenerLocal(dni)
-    if (local) return { ...local, offline: true }
+    if (local) return validarLocal(local)
     throw error
   }
+}
+
+function validarLocal(local) {
+  if (!autorizacionOperadorVigente(local)) {
+    throw new Error(
+      'La autorización guardada venció. Conéctese para validar la asignación de hoy.'
+    )
+  }
+  return { ...local, offline: true }
 }

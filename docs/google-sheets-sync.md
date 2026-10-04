@@ -145,6 +145,10 @@ Los dropdowns de trabajador y campaña solo ofrecen referencias sincronizadas y 
 
 `admin_guardar_rol_campania` recalcula `usuarios_app.activo` después de cada cambio. El acceso queda vigente cuando el trabajador conserva al menos un rol activo aplicable (`JABERO` o `SUPERVISORA`) dentro de una campaña ACTIVA. Si una fila cambia de trabajador, se recalcula tanto el trabajador anterior como el nuevo para evitar dejar acceso habilitado por una relación que ya no existe.
 
+Desde `202610030100_acceso_diario_jaberos.sql`, ese indicador expresa la habilitación por rol de campaña; el login aplica además la vigencia diaria. Un JABERO solo puede ingresar si `fecha_asignacion_jabero` corresponde al día actual de `America/Lima`. Guardar o reactivar el rol JABERO activo, o registrarlo nuevamente desde la PWA, asigna la jornada que confirma Supabase. Una fila de Sheets ya SINCRONIZADA no se renueva automáticamente al actualizar desde sistema: para una nueva jornada se debe registrar nuevamente o guardar la asignación como PENDIENTE y sincronizarla. El rol SUPERVISORA conserva su acceso durante la campaña activa.
+
+La PWA utiliza `validar_operador_diario`; el RPC original `validar_operador` conserva su tipo de retorno y también verifica la vigencia diaria. La autorización guardada en el dispositivo vence al cambiar el día de Perú; para ingresar sin conexión debe haberse validado ese mismo día. Las asignaciones nuevas realizadas sin conexión requieren confirmación de Supabase antes de conceder login a otro dispositivo.
+
 La integración técnica de Google Sheets no corresponde a un registro de `usuarios_app`. Por eso, una asignación nueva guarda `registrado_por_usuario_id = NULL`; las actualizaciones no sobrescriben ese campo y conservan el valor histórico existente.
 
 `admin_listar_roles_campania()` incluye asignaciones activas e inactivas e informa las referencias visibles y el estado de acceso resultante.
