@@ -9,7 +9,7 @@ export default defineConfig({
       manifest: {
         id: '/',
         name: 'Sistema de Control de Cosecha',
-        short_name: 'SCC',
+        short_name: 'Cosecha Quijas',
 
         description:
           'Sistema de Control de Cosecha',
