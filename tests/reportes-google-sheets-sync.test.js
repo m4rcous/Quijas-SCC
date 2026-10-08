@@ -77,6 +77,15 @@ function respuestaResumen(overrides = {}) {
   }
 }
 
+function metadatosRanking() {
+  return {
+    periodo: 'CAMPANIA', zona_horaria: 'America/Lima',
+    fecha_desde: '2026-08-01', fecha_hasta: '2026-09-30',
+    comparacion_disponible: true,
+    fecha_anterior_desde: '2026-08-01', fecha_anterior_hasta: '2026-09-29'
+  }
+}
+
 test('autorización SQL usa puede_consultar_reportes y auth.uid()', () => {
   const cuerpo = sql.match(
     /create or replace function public\.autorizar_integracion_reportes\(\)[\s\S]*?end;\s*\$\$;/i
@@ -152,6 +161,7 @@ test('resumen acepta cero producción y última lectura nula', () => {
 
 test('ranking se normaliza y preserva posición enviada por servidor', () => {
   const resultado = normalizarRankingReporteScc_({
+    ...metadatosRanking(),
     ok: true,
     campania: 'Arándanos 2026',
     ranking: [{
@@ -168,6 +178,7 @@ test('ranking se normaliza y preserva posición enviada por servidor', () => {
 
 test('ranking vacío es un estado válido', () => {
   const resultado = normalizarRankingReporteScc_({
+    ...metadatosRanking(),
     ok: true,
     campania: 'Arándanos 2026',
     ranking: []
@@ -177,6 +188,7 @@ test('ranking vacío es un estado válido', () => {
 
 function respuestaRankingProvisional() {
   return {
+    ...metadatosRanking(),
     ok: true,
     campania: 'Arándanos 2026',
     ranking: [
@@ -225,18 +237,33 @@ test('actualizar ranking escribe también provisionales y luego recupera el nomb
   const escrituras = []
   const hoja = {
     getFilter: () => null,
-    getDataRange: () => ({ clearContent() { escrituras.length = 0 } }),
+    getMaxRows: () => 1000,
+    getLastRow: () => 20,
+    setConditionalFormatRules() {},
     getRange: (...rango) => ({
       setValues(valores) { escrituras.push({ rango, valores }); return this },
-      setValue(valor) { assert.fail(`No debe mostrar ${valor}`) },
+      setValue() { return this },
+      clearContent() { return this },
+      clearFormat() { return this },
       setFontWeight() { return this },
       setNumberFormat() { return this },
+      setWrap() { return this },
       createFilter() { return this }
     })
   }
   const contextoEscritura = vm.createContext({ Date, SCC_CONFIG: { hojaRanking: 'RANKING' } })
   vm.runInContext(pureSource + '\n' + reportesSource, contextoEscritura)
-  contextoEscritura.configurarHojaTablaReporte_ = () => hoja
+  contextoEscritura.configurarHojaRanking_ = () => hoja
+  contextoEscritura.SpreadsheetApp = {
+    newConditionalFormatRule: () => {
+      const regla = {
+        whenFormulaSatisfied() { return this }, setBackground() { return this },
+        setBold() { return this }, setRanges() { return this }, build() { return this },
+        whenTextContains() { return this }, setFontColor() { return this }
+      }
+      return regla
+    }
+  }
   const respuesta = respuestaRankingProvisional()
   const actualizar = () => contextoEscritura.ejecutarActualizacionReportesScc_([{
     nombre: 'RANKING',
@@ -245,15 +272,17 @@ test('actualizar ranking escribe también provisionales y luego recupera el nomb
     escribir: contextoEscritura.escribirRankingReporte_
   }])
   assert.equal(actualizar()[0].ok, true)
-  const filas = escrituras[1].valores
+  const filas = escrituras.find(({ rango }) => rango[0] === 12 && rango[3] === 6).valores
   assert.equal(filas.length, 5)
   assert.equal(filas[0][2], 'Ana Pérez')
   assert.deepEqual(Array.from(filas[1]).slice(0, 4), [2, '01234560', 'ASIGNAR NOMBRE', 20])
   assert.equal(filas[1][4].toISOString(), '2026-09-30T15:40:00.000Z')
   respuesta.ranking[1].cosechador = 'Fausto Rodríguez'
+  escrituras.length = 0
   assert.equal(actualizar()[0].ok, true)
-  assert.equal(escrituras[1].valores[1][2], 'Fausto Rodríguez')
-  assert.equal(escrituras[1].valores[1][3], 20)
+  const nuevas = escrituras.find(({ rango }) => rango[0] === 12 && rango[3] === 6).valores
+  assert.equal(nuevas[1][2], 'Fausto Rodríguez')
+  assert.equal(nuevas[1][3], 20)
 })
 
 test('producción diaria se normaliza sin reordenar filas', () => {

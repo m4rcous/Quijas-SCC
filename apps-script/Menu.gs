@@ -4,6 +4,7 @@ function crearMenuScc_() {
     .addItem('Sincronizar datos', 'menuSincronizarDatos')
     .addItem('Actualizar desde sistema', 'menuActualizarDesdeSistema')
     .addItem('Actualizar reportes', 'menuActualizarReportes')
+    .addItem('Actualizar ranking', 'menuActualizarRanking')
     .addToUi();
 }
 
@@ -75,6 +76,10 @@ function menuActualizarReportes() {
     'Actualización de reportes terminada\n\n' +
     formatearResultadoActualizacionReportesScc_(resultados)
   );
+}
+
+function menuActualizarRanking() {
+  SpreadsheetApp.getUi().alert(formatearResultadoActualizacionReportesScc_(actualizarRankingReporte_()));
 }
 
 function ejecutarSincronizacionMaestroScc_(sincronizar) {

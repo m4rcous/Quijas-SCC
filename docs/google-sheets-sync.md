@@ -213,7 +213,7 @@ Al abrir el Spreadsheet, `onOpen` crea el menú SCC y configura las hojas admini
 `SCC → Actualizar reportes` consulta, valida y actualiza de forma independiente:
 
 1. RESUMEN → `admin_obtener_resumen_campania(p_zona_horaria)`;
-2. RANKING → `admin_obtener_ranking_cosechadores()`;
+2. RANKING → `admin_obtener_ranking_cosechadores_periodo(p_periodo, p_zona_horaria)`;
 3. PRODUCCION_DIARIA → `admin_obtener_produccion_diaria(p_zona_horaria)`;
 4. PRODUCCION_LOTES → `admin_obtener_produccion_lotes()`.
 
@@ -229,7 +229,22 @@ Presenta una vista administrativa simple con campaña, fecha de inicio, total de
 
 ### RANKING
 
-Columnas: Posición, DNI, Cosechador, Jabas y Última lectura. El orden y la posición vienen del backend; Apps Script no recalcula el ranking y conserva empates producidos por `DENSE_RANK`. Sin producción se conserva el encabezado y se muestra una fila informativa.
+El selector editable **B2** ofrece Hoy, Semana, Mes y Campaña; Campaña es el valor inicial para conservar el alcance del reporte anterior. Elegir un período no consulta Supabase: usa **SCC → Actualizar ranking** para actualizar solo esta hoja o **SCC → Actualizar reportes** para actualizar las cuatro. El resto de la hoja permanece protegido como reporte generado.
+
+Arriba de la tabla se muestran campaña, período efectivamente consultado y fechas, fechas de comparación, total de jabas, cosechadores con producción y última actualización. El período mostrado se conserva hasta una actualización exitosa, aunque el selector cambie. Las lecturas pendientes en un PDA offline no se incluyen.
+
+El encabezado está en la fila 11; columnas: Posición, DNI, Cosechador, Jabas, Última lectura y Cambio. Al abrir una hoja con el formato anterior se desplazan sus filas para conservar la producción visible. Se congelan las primeras 11 filas y el filtro abarca únicamente la tabla. El DNI se escribe como texto, incluidos sus ceros iniciales.
+
+El orden y las posiciones actual y anterior vienen del backend. Apps Script no recalcula el ranking y conserva empates producidos por `DENSE_RANK`. Se resaltan las posiciones 1, 2 y 3 con colores oro, plata y bronce; todos los cosechadores empatados reciben el mismo resaltado. Sin producción se conserva el resumen en cero, el encabezado y una fila informativa; se eliminan las filas y reglas visuales anteriores.
+
+La columna Cambio usa `posición anterior − posición actual`: ↑ sube, ↓ baja, = mantiene y Nuevo indica que el cosechador no tuvo producción en el período anterior. El ranking anterior incluye a quienes no aparecen en el actual. Las comparaciones siempre usan la misma campaña activa:
+
+- Hoy: jornada de ayer.
+- Semana: lunes a hoy contra lunes al mismo día de la semana anterior.
+- Mes: desde el día 1 hasta hoy contra esos días del mes anterior, limitado a su último día si es más corto.
+- Campaña: acumulado de la campaña hasta hoy contra el acumulado hasta ayer, sin comparar trabajadores de otra campaña.
+
+Los períodos usan días calendario de la zona horaria del Spreadsheet y excluyen lecturas desde la medianoche posterior a hoy. La jornada actual puede estar incompleta. Si una campaña recién empieza hoy y no tiene días previos, se muestra Sin comparación. Las fechas visibles explican el alcance exacto. Una consulta o validación fallida conserva el reporte anterior.
 
 Los cosechadores provisionales sin nombre aparecen como `ASIGNAR NOMBRE`, conservando DNI, posición, jabas y última lectura. Este texto solo se muestra en el reporte; no se guarda como nombre del trabajador ni impide actualizar el ranking completo.
 
@@ -241,18 +256,26 @@ Columnas: Fecha, Jabas, Cosechadores y Sesiones. El backend entrega los días de
 
 Columnas: Lote, Nombre, Variedad, Jabas, Cosechadores, Sesiones y Última lectura. El orden viene del backend. Si no hay producción se conserva únicamente el encabezado.
 
-Los cuatro reportes se protegen como hojas generadas por el sistema, congelan encabezados cuando corresponde y usan formatos numéricos y de fecha simples, sin dashboards ni gráficos.
+Los cuatro reportes se protegen como hojas generadas por el sistema, congelan encabezados cuando corresponde y usan formatos numéricos y de fecha. RANKING permite editar únicamente su selector y añade resumen y formato condicional.
 
 ## Reglas de negocio de los reportes
 
 Las RPC administrativas replican el SQL ya usado por SCC operativo. Una fila de `lecturas_jaba` equivale a una jaba, por lo que `total_jabas` usa siempre `COUNT(lj.id)`. No se deduplican tickets.
 
 - RESUMEN: `COUNT(lj.id)`, cosechadores distintos, lotes distintos, sesiones distintas, días distintos en el timezone solicitado y `MAX(lj.fecha_hora)`.
-- RANKING: `COUNT(lj.id)`, `DENSE_RANK` por `total_jabas DESC` y última lectura por cosechador.
+- RANKING: `COUNT(lj.id)` por período, `DENSE_RANK` por `total_jabas DESC` en ambos períodos y última lectura por cosechador. La identidad de comparación es `trabajadores.id`.
 - PRODUCCION_DIARIA: agrupa `(lj.fecha_hora AT TIME ZONE p_zona_horaria)::date`, con jabas, cosechadores y sesiones.
 - PRODUCCION_LOTES: jabas, cosechadores, sesiones y última lectura por lote.
 
 Las RPC operativas existentes de la PWA no se modifican; las versiones administrativas son paralelas y no requieren `p_dni_operador`.
+
+### Instalación del ranking por período
+
+1. Aplicar `supabase/migrations/202610030300_admin_ranking_por_periodo.sql` en Supabase. Reutiliza el permiso de reportes existente, conserva la RPC administrativa anterior y no concede acceso a `anon`.
+2. Actualizar `Reportes.gs`, `ReportesPure.gs` y `Menu.gs` en el proyecto Apps Script vinculado al Spreadsheet.
+3. Recargar el Spreadsheet para configurar el selector y el menú; usar SCC → Actualizar ranking.
+
+La migración se verifica localmente con PostgreSQL embebido (PGlite), incluyendo límites de medianoche, empates, cambios de posición, febrero y permisos. Las pruebas de Apps Script simulan el Spreadsheet; la instalación y revisión en la hoja real requieren el proyecto vinculado.
 
 ## Migraciones
 

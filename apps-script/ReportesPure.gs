@@ -113,12 +113,45 @@ function normalizarRankingReporteScc_(respuesta) {
   if (!respuesta || respuesta.ok !== true || !Array.isArray(respuesta.ranking)) {
     throw new Error('Respuesta inválida del ranking');
   }
-  return {
+  var periodo = normalizarPeriodoRankingScc_(respuesta.periodo);
+  var desde = normalizarFechaCalendarioReporteScc_(respuesta.fecha_desde, 'fecha_desde');
+  var hasta = normalizarFechaCalendarioReporteScc_(respuesta.fecha_hasta, 'fecha_hasta');
+  var comparable = respuesta.comparacion_disponible;
+  if (typeof comparable !== 'boolean' || desde > hasta) {
+    throw new Error('Respuesta inválida del período del ranking');
+  }
+  var anteriorDesde = comparable
+    ? normalizarFechaCalendarioReporteScc_(respuesta.fecha_anterior_desde, 'fecha_anterior_desde') : null;
+  var anteriorHasta = comparable
+    ? normalizarFechaCalendarioReporteScc_(respuesta.fecha_anterior_hasta, 'fecha_anterior_hasta') : null;
+  if ((comparable && (anteriorDesde > anteriorHasta || anteriorHasta >= hasta)) ||
+      (!comparable && (respuesta.fecha_anterior_desde != null || respuesta.fecha_anterior_hasta != null))) {
+    throw new Error('Respuesta inválida de la comparación del ranking');
+  }
+  var reporte = {
     campania: normalizarTextoReporteScc_(respuesta.campania, 'campaña'),
+    periodo: periodo,
+    zonaHoraria: normalizarTextoReporteScc_(respuesta.zona_horaria, 'zona_horaria'),
+    fechaDesde: desde,
+    fechaHasta: hasta,
+    comparacionDisponible: comparable,
+    fechaAnteriorDesde: anteriorDesde,
+    fechaAnteriorHasta: anteriorHasta,
     ranking: respuesta.ranking.map(function (fila) {
       if (!fila || typeof fila !== 'object') throw new Error('Respuesta inválida del ranking');
+      var posicion = normalizarEnteroReporteScc_(fila.posicion, 'posición');
+      var anterior = fila.posicion_anterior == null ? null
+        : normalizarEnteroReporteScc_(fila.posicion_anterior, 'posición anterior');
+      var cambio = fila.cambio_posicion == null ? null : Number(fila.cambio_posicion);
+      if (posicion < 1 || anterior === 0 || (!comparable && anterior != null) ||
+          (anterior == null && cambio != null) ||
+          (anterior != null && (!Number.isInteger(cambio) || cambio !== anterior - posicion))) {
+        throw new Error('Respuesta inválida del cambio de posición');
+      }
       return {
-        posicion: normalizarEnteroReporteScc_(fila.posicion, 'posición'),
+        posicion: posicion,
+        posicionAnterior: anterior,
+        cambioPosicion: cambio,
         cosechadorDni: normalizarTextoReporteScc_(fila.cosechador_dni, 'cosechador_dni'),
         cosechador: String(fila.cosechador == null ? '' : fila.cosechador).trim() || 'ASIGNAR NOMBRE',
         totalJabas: normalizarEnteroReporteScc_(fila.total_jabas, 'total_jabas'),
@@ -126,6 +159,41 @@ function normalizarRankingReporteScc_(respuesta) {
       };
     })
   };
+  reporte.totalJabas = reporte.ranking.reduce(function (total, fila) { return total + fila.totalJabas; }, 0);
+  reporte.totalCosechadores = reporte.ranking.length;
+  return reporte;
+}
+
+function normalizarPeriodoRankingScc_(valor) {
+  var periodo = String(valor == null ? '' : valor).trim().toUpperCase();
+  if (periodo === 'CAMPAÑA') periodo = 'CAMPANIA';
+  if (['HOY', 'SEMANA', 'MES', 'CAMPANIA'].indexOf(periodo) < 0) {
+    throw new Error('Período de ranking inválido. Elige Hoy, Semana, Mes o Campaña.');
+  }
+  return periodo;
+}
+
+function etiquetaPeriodoRankingScc_(periodo) {
+  return { HOY: 'Hoy', SEMANA: 'Semana', MES: 'Mes', CAMPANIA: 'Campaña' }[normalizarPeriodoRankingScc_(periodo)];
+}
+
+function crearPayloadRankingReporteScc_(periodo, zonaHoraria) {
+  return {
+    p_periodo: normalizarPeriodoRankingScc_(periodo),
+    p_zona_horaria: normalizarTextoReporteScc_(zonaHoraria, 'zona horaria')
+  };
+}
+
+function formatearCambioPosicionRankingScc_(fila, comparable) {
+  if (!comparable) return 'Sin comparación';
+  if (fila.posicionAnterior == null) return 'Nuevo';
+  if (fila.cambioPosicion === 0) return '=';
+  return (fila.cambioPosicion > 0 ? '↑ ' : '↓ ') + Math.abs(fila.cambioPosicion);
+}
+
+function formatearRangoRankingScc_(desde, hasta) {
+  function fecha(valor) { return valor.split('-').reverse().join('/'); }
+  return desde === hasta ? fecha(desde) : fecha(desde) + ' al ' + fecha(hasta);
 }
 
 function normalizarProduccionDiariaReporteScc_(respuesta) {
