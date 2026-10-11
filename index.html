@@ -93,6 +93,18 @@
         </div>
       </section>
 
+      <section id="vista-cultivos" class="pantalla pantalla-login oculto">
+        <div class="login-card card">
+          <h1>¿Con qué cultivo vas a trabajar?</h1>
+          <p>Elige una de tus campañas activas.</p>
+          <div id="opciones-cultivo" class="form-stack"></div>
+          <p id="cultivo-mensaje" class="mensaje" aria-live="polite"></p>
+          <button id="btn-cancelar-cultivo" class="btn-secondary" type="button">
+            Volver al ingreso
+          </button>
+        </div>
+      </section>
+
       <section id="vista-menu" class="pantalla oculto">
         <header class="app-header">
           <div class="app-header__identity">
@@ -118,6 +130,7 @@
         <div class="contenido contenido-home">
           <div class="encabezado-menu">
             <p class="eyebrow">Operación de campo</p>
+            <p id="menu-campania" class="subtitulo"></p>
             <h1>¿Qué necesita hacer?</h1>
           </div>
           <div

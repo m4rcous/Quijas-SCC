@@ -167,11 +167,11 @@ test('cerrar y reabrir una conexión IndexedDB conserva los conteos', async () =
   await guardarLecturaLocal(lectura({ id: 'cj-reapertura-1', sesion }))
   await guardarLecturaLocal(lectura({ id: 'cj-reapertura-2', sesion }))
 
-  const primera = await openDB('scc', 3)
+  const primera = await openDB('scc', 4)
   assert.equal(await primera.countFromIndex('lecturas', 'sesion_id', sesion), 2)
   primera.close()
 
-  const reabierta = await openDB('scc', 3)
+  const reabierta = await openDB('scc', 4)
   assert.equal(await reabierta.countFromIndex('lecturas', 'sesion_id', sesion), 2)
   reabierta.close()
 })

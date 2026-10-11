@@ -40,7 +40,10 @@ export async function sincronizarPendientes() {
       procesarOperacion,
       async (operacion) => {
         if (operacion.tipo === 'ASIGNAR_TICKET') {
-          await marcarTicketSincronizado(operacion.payload.codigoTicket)
+          await marcarTicketSincronizado(
+            operacion.payload.codigoTicket,
+            operacion.payload.campaniaId
+          )
         }
         if (operacion.tipo === 'REGISTRAR_JABA') {
           await marcarLecturaSincronizada(operacion.payload.lecturaId)
@@ -49,7 +52,8 @@ export async function sincronizarPendientes() {
           await marcarJabero(
             operacion.payload.dniTrabajador,
             'SINCRONIZADO',
-            operacion.id
+            operacion.id,
+            operacion.payload.campaniaId
           )
         }
         await marcarOperacionSincronizada(operacion.id)
@@ -61,10 +65,19 @@ export async function sincronizarPendientes() {
         }
         await marcarOperacionError(operacion.id, error.message)
         if (operacion.tipo === 'ASIGNAR_TICKET') {
-          await marcarTicketError(operacion.payload.codigoTicket, error.message)
+          await marcarTicketError(
+            operacion.payload.codigoTicket,
+            error.message,
+            operacion.payload.campaniaId
+          )
         }
         if (operacion.tipo === 'REGISTRAR_JABERO') {
-          await marcarJabero(operacion.payload.dniTrabajador, 'ERROR', operacion.id)
+          await marcarJabero(
+            operacion.payload.dniTrabajador,
+            'ERROR',
+            operacion.id,
+            operacion.payload.campaniaId
+          )
         }
       }
     )
@@ -88,6 +101,7 @@ async function procesarOperacion(operacion) {
     case 'REGISTRAR_JABA':
       return registrarLecturaJaba({
         dniOperador: operacion.payload.dniOperador,
+        campaniaId: operacion.payload.campaniaId,
         sesionId: operacion.payload.sesionId,
         codigoTicket: operacion.payload.codigoTicket,
         lecturaId: operacion.payload.lecturaId,
@@ -97,6 +111,7 @@ async function procesarOperacion(operacion) {
 
     case 'CERRAR_SESION':
       return cerrarSesionLectura({
+        campaniaId: operacion.payload.campaniaId,
         dniOperador: operacion.payload.dniOperador,
         sesionId: operacion.payload.sesionId,
         operacionId: operacion.id

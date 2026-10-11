@@ -6,6 +6,7 @@ import vm from 'node:vm'
 import { PGlite } from '@electric-sql/pglite'
 import * as local from '../src/offline/db.js'
 import { ejecutarCola } from '../src/offline/cola.js'
+import { parametrosCampania } from '../src/modules/campaniaOperador.js'
 
 const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf8')
 const db = new PGlite()
@@ -267,6 +268,7 @@ test('listado administrativo conserva autorización y permisos de RPC', async ()
 })
 
 test('reconexión procesa una sola REGISTRAR_JABERO real desde IndexedDB hasta PostgreSQL', async () => {
+  await local.seleccionarCampaniaLocal(CAMP)
   await local.guardarCache({
     campania: { id: CAMP, nombre: 'Arándanos 2026', estado: 'ACTIVA' },
     sincronizado_en: '',
@@ -279,6 +281,7 @@ test('reconexión procesa una sola REGISTRAR_JABERO real desde IndexedDB hasta P
   const contexto = vm.createContext({
     ...local,
     ejecutarCola,
+    parametrosCampania,
     navigator: { onLine: false },
     supabase: {
       rpc: async (nombre, args) => {
@@ -309,7 +312,8 @@ test('reconexión procesa una sola REGISTRAR_JABERO real desde IndexedDB hasta P
   contexto.navigator.onLine = true
   await contexto.sincronizarPendientes()
   assert.equal(llamadas.length, 1)
-  assert.equal(llamadas[0].nombre, 'registrar_jabero')
+  assert.equal(llamadas[0].nombre, 'registrar_jabero_campania')
+  assert.equal(llamadas[0].args.p_campania_id, CAMP)
   assert.equal(llamadas[0].args.p_operacion_id, op.id)
   const restante = await local.obtenerColaCompleta()
   assert.equal(restante.length, 1)

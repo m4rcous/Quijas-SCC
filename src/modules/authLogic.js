@@ -26,6 +26,7 @@ export async function validarOperadorConFuentes(
       dni: data.dni,
       nombre: data.nombre,
       autorizado_para_fecha: data.autorizado_para_fecha,
+      ...(data.campanias ? { campanias: data.campanias } : {}),
       actualizado_en: new Date().toISOString()
     })
     return data

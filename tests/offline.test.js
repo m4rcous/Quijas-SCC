@@ -88,6 +88,7 @@ test('los tickets del caché se pueden consultar por código', async () => {
   })
 
   assert.deepEqual(await obtenerTicket('CACHE123'), {
+    campania_id: '',
     codigo_ticket: 'CACHE123',
     fecha_asignacion: null,
     estado_sync: 'SINCRONIZADO'

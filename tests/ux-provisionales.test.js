@@ -10,6 +10,7 @@ import * as jaberos from '../src/modules/jaberosCampania.js'
 import * as cosechadores from '../src/modules/cosechadoresJabas.js'
 import * as sesiones from '../src/modules/sesionesLectura.js'
 import { nombreCosechadorVisible } from '../src/modules/cosechadorLocal.js'
+import { parametrosCampania } from '../src/modules/campaniaOperador.js'
 
 const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf8')
 const main = read('../src/main.js')
@@ -22,7 +23,8 @@ const base = (trabajadores = [], tickets = []) => ({
   lotes: []
 })
 beforeEach(async () => {
-  const db = await openDB('scc', 3)
+  await local.seleccionarCampaniaLocal('campania-test')
+  const db = await openDB('scc', 4)
   const tx = db.transaction([...db.objectStoreNames], 'readwrite')
   for (const name of db.objectStoreNames) await tx.objectStore(name).clear()
   await tx.done
@@ -96,8 +98,9 @@ function consulta(id, consultar = async () => ({ data: base() })) {
     ...cosechadores,
     ...sesiones,
     nombreCosechadorVisible,
+    parametrosCampania,
     document: { createElement: element },
-    operador: { dni: '47480378' },
+    operador: { dni: '47480378', campania: { id: 'campania-test' } },
     consultaActual: null,
     ticketsConsultaActual: [],
     trabajadoresConsultaActual: [],
@@ -232,7 +235,7 @@ test('Actualizar recibe nombre oficial y lo renderiza inmediatamente en asignaci
   assert.deepEqual(vista.nombres(), ['DNI 43829105'])
   await vista.actualizar()
   assert.deepEqual(vista.nombres(), ['Fausto Rodríguez'])
-  assert.equal(vista.calls[0].name, 'obtener_cache_operativa')
+  assert.equal(vista.calls[0].name, 'obtener_cache_operativa_campania')
   assert.equal(vista.calls[0].args.p_dni_operador, '47480378')
   assert.equal((await local.obtenerTicket('C71048263')).estado_sync, 'PENDIENTE')
   assert.equal((await local.obtenerColaCompleta())[0].id, op.id)

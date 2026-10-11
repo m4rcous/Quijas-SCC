@@ -7,6 +7,8 @@ export function obtenerOperacionesDependientes(operacion, operaciones) {
     if (posterior.id === operacion.id || posterior.creado_en <= operacion.creado_en) {
       return false
     }
+    if ((posterior.payload.campaniaId ?? '') !== (operacion.payload.campaniaId ?? ''))
+      return false
 
     if (operacion.tipo === 'ASIGNAR_TICKET') {
       return (
@@ -52,14 +54,21 @@ export async function ejecutarCola(operaciones, procesar, alSincronizar, alFalla
   const ordenadas = [...operaciones].sort((a, b) =>
     a.creado_en.localeCompare(b.creado_en)
   )
+  const bloqueadas = new Set()
   for (const operacion of ordenadas) {
+    const campania = operacion.payload.campaniaId ?? ''
+    if (bloqueadas.has(campania)) continue
     if (operacion.estado === 'SINCRONIZADA') continue
-    if (operacion.estado !== 'PENDIENTE') break
+    if (operacion.estado !== 'PENDIENTE') {
+      bloqueadas.add(campania)
+      continue
+    }
     try {
       await procesar(operacion)
     } catch (error) {
       await alFallar(operacion, error, esErrorTemporal(error))
-      break
+      bloqueadas.add(campania)
+      continue
     }
     await alSincronizar(operacion)
   }

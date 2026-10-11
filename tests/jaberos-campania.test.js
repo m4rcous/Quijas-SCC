@@ -174,20 +174,20 @@ test('el estado pendiente persiste al cerrar y reabrir una conexión IndexedDB',
   await registrarJaberoOffline('12345678', '86000001')
 
   const conexionInicial = await new Promise((resolve, reject) => {
-    const request = indexedDB.open('scc', 3)
+    const request = indexedDB.open('scc', 4)
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
   })
   conexionInicial.close()
 
   const conexionReabierta = await new Promise((resolve, reject) => {
-    const request = indexedDB.open('scc', 3)
+    const request = indexedDB.open('scc', 4)
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
   })
   const registro = await new Promise((resolve, reject) => {
     const tx = conexionReabierta.transaction('trabajadores', 'readonly')
-    const request = tx.objectStore('trabajadores').get('86000001')
+    const request = tx.objectStore('trabajadores').get(['', '86000001'])
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
   })

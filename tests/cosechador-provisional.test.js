@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import {
   guardarAsignacionOffline,
   guardarCache,
+  seleccionarCampaniaLocal,
   obtenerColaCompleta,
   obtenerTrabajador
 } from '../src/offline/db.js'
@@ -29,6 +30,7 @@ const migration = fs.readFileSync(
 )
 
 async function cargarCache(trabajadores = []) {
+  await seleccionarCampaniaLocal('campania-provisional')
   await guardarCache({
     campania: { id: 'campania-provisional', nombre: 'Campaña provisional' },
     sincronizado_en: new Date().toISOString(),

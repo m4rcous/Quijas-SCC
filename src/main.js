@@ -6,6 +6,12 @@ import { buscarCosechador } from './modules/asignacionTickets'
 import { nombreCosechadorVisible } from './modules/cosechadorLocal'
 import { actualizarCacheOperativa } from './modules/cacheOperativa'
 import {
+  resolverCampaniaOperador,
+  parametrosCampania
+} from './modules/campaniaOperador'
+import { seleccionarCampaniaLocal, obtenerCacheCampania } from './offline/db'
+import { esErrorTemporal } from './offline/errores'
+import {
   obtenerVariedadesLote,
   seleccionarVariedadLote
 } from './modules/variedadesLote'
@@ -124,6 +130,69 @@ const vistaProduccionLotes = document.querySelector('#vista-produccion-lotes')
 const sesionesRestaurables = document.querySelector('#sesiones-restaurables')
 const resumenSync = document.querySelector('#resumen-sync')
 const operacionesError = document.querySelector('#operaciones-error')
+
+async function prepararIngreso(idRestaurado) {
+  const campania = resolverCampaniaOperador(
+    operador,
+    operador.campanias?.some((item) => item.id === idRestaurado) ? idRestaurado : null
+  )
+  if (campania) return ingresarCampania(campania)
+  opcionesCultivo.replaceChildren()
+  cultivoMensaje.textContent = ''
+  for (const opcion of operador.campanias) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'btn-primary'
+    button.textContent = `${opcion.cultivo_nombre} · ${opcion.nombre}`
+    button.addEventListener('click', async () => {
+      for (const item of opcionesCultivo.children) item.disabled = true
+      cultivoMensaje.textContent = ''
+      try {
+        await ingresarCampania(opcion)
+      } catch (error) {
+        cultivoMensaje.textContent = error.message
+      } finally {
+        for (const item of opcionesCultivo.children) item.disabled = false
+      }
+    })
+    opcionesCultivo.appendChild(button)
+  }
+  mostrarVista(vistaCultivos)
+}
+
+async function ingresarCampania(campania) {
+  const operadorIngreso = operador
+  campania = resolverCampaniaOperador(operadorIngreso, campania.id)
+  await seleccionarCampaniaLocal(campania.id)
+  const cacheLocal = await obtenerCacheCampania(campania.id)
+  if (operador.offline) {
+    if (!cacheLocal)
+      throw new Error(
+        'Esta campaña no está disponible sin conexión. Conéctese para cargarla por primera vez.'
+      )
+  } else {
+    try {
+      await actualizarCacheOperativa(operador.dni, campania.id)
+    } catch (error) {
+      if (!esErrorTemporal(error) || !cacheLocal) throw error
+    }
+  }
+  if (operador !== operadorIngreso) return
+  operador = { ...operadorIngreso, campania }
+  sesionLectura = null
+  cosechador = null
+  resumenCampaniaActual = null
+  produccionLotesActual = []
+  produccionDiariaActual = []
+  rankingCosechadoresActual = []
+  sessionStorage.setItem('operador_dni', operador.dni)
+  sessionStorage.setItem('campania_id', campania.id)
+  mostrarMenu()
+  if (navigator.onLine)
+    sincronizarPendientes().then(actualizarEstadoConexion).catch(console.error)
+}
+
+document.querySelector('#btn-cancelar-cultivo').addEventListener('click', cerrarSesion)
 
 // LOGIN
 
@@ -370,6 +439,20 @@ function desactivarTecladoManual(...inputs) {
 // ESTADO
 
 let operador = null
+const vistaCultivos = document.querySelector('#vista-cultivos')
+const opcionesCultivo = document.querySelector('#opciones-cultivo')
+const cultivoMensaje = document.querySelector('#cultivo-mensaje')
+const menuCampania = document.querySelector('#menu-campania')
+
+async function rpcCampania(nombre, parametros) {
+  if (!operador?.campania?.id)
+    throw new Error('Ingrese para seleccionar su campaña de trabajo.')
+  const id = operador.campania.id
+  const respuesta = await supabase.rpc(...parametrosCampania(id, nombre, parametros))
+  if (operador?.campania?.id !== id)
+    throw new Error('La campaña de trabajo cambió. Actualice la consulta.')
+  return respuesta
+}
 let cosechador = null
 let sesionLectura = null
 
@@ -1034,7 +1117,7 @@ async function cargarResumenCampania() {
 
   try {
     const respuesta = await obtenerResumenCampania(operador.dni, (nombre, parametros) =>
-      supabase.rpc(nombre, parametros)
+      rpcCampania(nombre, parametros)
     )
     resumenCampaniaActual = reemplazarResumenCampania(resumenCampaniaActual, respuesta)
     ocultarFeedbackResumenCampania()
@@ -1118,7 +1201,7 @@ async function cargarRankingCosechadores() {
   try {
     const respuesta = await obtenerRankingCosechadores(
       operador.dni,
-      (nombre, parametros) => supabase.rpc(nombre, parametros),
+      (nombre, parametros) => rpcCampania(nombre, parametros),
       rankingPeriodo.value
     )
     rankingCosechadoresActual = reemplazarRankingCosechadores(
@@ -1245,7 +1328,7 @@ async function cargarProduccionDiaria() {
   try {
     const respuesta = await obtenerProduccionDiaria(
       operador.dni,
-      (nombre, parametros) => supabase.rpc(nombre, parametros)
+      (nombre, parametros) => rpcCampania(nombre, parametros)
     )
     produccionDiariaActual = reemplazarProduccionDiaria(
       produccionDiariaActual,
@@ -1362,7 +1445,7 @@ async function cargarProduccionLotes() {
 
   try {
     const respuesta = await obtenerProduccionLotes(operador.dni, (nombre, parametros) =>
-      supabase.rpc(nombre, parametros)
+      rpcCampania(nombre, parametros)
     )
     produccionLotesActual = reemplazarProduccionLotes(
       produccionLotesActual,
@@ -1523,7 +1606,8 @@ async function actualizarConsultaOperativa() {
     ) {
       throw new Error('Sin conexión. Conéctese para actualizar los datos.')
     }
-    if (navigator.onLine) await actualizarCacheOperativa(operador.dni)
+    if (navigator.onLine)
+      await actualizarCacheOperativa(operador.dni, operador.campania.id)
     if (consultaActual !== consulta || vistaConsulta.classList.contains('oculto'))
       return
     if (['asignados-hoy', 'buscar-asignacion'].includes(consulta.id))
@@ -1643,18 +1727,8 @@ configurarEnvioScanner(formLogin, dniOperadorInput, async (dni) => {
   }
   try {
     operador = await validarOperador(dni)
-    sessionStorage.setItem('operador_dni', operador.dni)
-    if (!operador.offline) {
-      try {
-        await actualizarCacheOperativa(operador.dni)
-      } catch (error) {
-        console.error('No se pudo actualizar el caché:', error)
-      }
-    }
     desactivarTecladoManual(dniOperadorInput)
-    mostrarMenu()
-    if (navigator.onLine)
-      sincronizarPendientes().then(actualizarEstadoConexion).catch(console.error)
+    await prepararIngreso()
   } catch (error) {
     mostrarErrorLogin(error.message)
     dniOperadorInput.select()
@@ -1709,9 +1783,9 @@ async function mostrarEstadoSync() {
 }
 
 async function actualizarVistaSync() {
-  const operaciones = (await obtenerColaCompleta()).sort((a, b) =>
-    a.creado_en.localeCompare(b.creado_en)
-  )
+  const operaciones = (await obtenerColaCompleta())
+    .filter((op) => op.payload.campaniaId === operador.campania.id)
+    .sort((a, b) => a.creado_en.localeCompare(b.creado_en))
   const pendientes = operaciones.filter((item) => item.estado === 'PENDIENTE')
   const errores = operaciones.filter((item) => item.estado === 'ERROR')
   resumenSync.textContent = `${pendientes.length} pendientes · ${errores.length} errores`
@@ -1818,7 +1892,10 @@ btnSalirMenu.addEventListener('click', cerrarSesion)
 function cerrarSesion() {
   operador = null
   cosechador = null
+  sesionLectura = null
   sessionStorage.removeItem('operador_dni')
+  sessionStorage.removeItem('campania_id')
+  seleccionarCampaniaLocal('')
   dniOperadorInput.value = ''
   mostrarVista(vistaLogin)
   dniOperadorInput.focus()
@@ -1966,6 +2043,7 @@ function mostrarVista(vista) {
   desactivarTecladoManual()
   cerrarMenuContextual()
   vistaLogin.classList.add('oculto')
+  vistaCultivos.classList.add('oculto')
   vistaMenu.classList.add('oculto')
   vistaAsignacion.classList.add('oculto')
   vistaJaberos.classList.add('oculto')
@@ -1984,6 +2062,9 @@ function mostrarMenu() {
   if (!verificarVigenciaOperador()) return
   mostrarVista(vistaMenu)
   menuOperador.textContent = operador.nombre
+  menuCampania.textContent = operador.campania
+    ? `${operador.campania.cultivo_nombre} · ${operador.campania.nombre}`
+    : ''
   actualizarEstadoConexion()
   mostrarSesionesActivas().catch(console.error)
 }
@@ -2093,9 +2174,7 @@ async function restaurarSesion() {
   }
   try {
     operador = await validarOperador(dni)
-    mostrarMenu()
-    if (navigator.onLine)
-      sincronizarPendientes().then(actualizarEstadoConexion).catch(console.error)
+    await prepararIngreso(sessionStorage.getItem('campania_id'))
   } catch {
     sessionStorage.removeItem('operador_dni')
   }
@@ -2212,6 +2291,7 @@ configurarEnvioScanner(formIniciarLectura, dniJaberoLectura, async (dni) => {
       jabero: trabajador.nombre,
       lote_id: lote.lote_id,
       lote_codigo: lote.codigo,
+      campania_id: operador.campania.id,
       variedad_id: variedad.id,
       variedad: variedad.nombre,
       dni_jabero: dni,

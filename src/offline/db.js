@@ -1,10 +1,16 @@
 import { openDB } from 'idb'
 import { evaluarDescarteOperacion } from './cola.js'
+import {
+  conCampania,
+  establecerContextoCampania,
+  obtenerContextoCampania,
+  migrarCampaniasLocales
+} from './campanias.js'
 
 const DB_NAME = 'scc'
-const DB_VERSION = 3
+const DB_VERSION = 4
 
-const dbPromise = openDB(DB_NAME, DB_VERSION, {
+const rawDbPromise = openDB(DB_NAME, DB_VERSION, {
   upgrade(db, oldVersion, _newVersion, transaction) {
     if (!db.objectStoreNames.contains('meta')) {
       db.createObjectStore('meta')
@@ -48,8 +54,24 @@ const dbPromise = openDB(DB_NAME, DB_VERSION, {
         sesiones.createIndex('dni_operador', 'dni_operador')
       }
     }
+    if (oldVersion < 4)
+      migrarCampaniasLocales(db, transaction).catch(() => transaction.abort())
   }
 })
+const dbPromise = {
+  then(resolve, reject) {
+    const id = obtenerContextoCampania()
+    return rawDbPromise.then((db) => resolve(conCampania(db, id)), reject)
+  }
+}
+
+export async function seleccionarCampaniaLocal(id) {
+  establecerContextoCampania(id)
+}
+
+export async function obtenerCacheCampania(id) {
+  return (await rawDbPromise).get('meta', `campania:${id}`)
+}
 
 // ============================================================
 // OPERADORES
@@ -80,7 +102,9 @@ export async function guardarCache(cache) {
   ) {
     throw new Error('El servidor devolvió una caché operativa inválida.')
   }
-  const db = await dbPromise
+  const db = (await dbPromise).conCampania(
+    cache.campania?.id ?? cache.campania?.campania_id ?? obtenerContextoCampania()
+  )
 
   const tx = db.transaction(
     ['meta', 'trabajadores', 'lotes', 'tickets', 'cola'],
@@ -110,6 +134,9 @@ async function reemplazarCacheEnTx(tx, cache) {
   )
 
   await tx.objectStore('meta').put(cache.campania, 'campania_activa')
+  const cacheId =
+    cache.campania?.id ?? cache.campania?.campania_id ?? obtenerContextoCampania()
+  await tx.objectStore('meta').put(cache.campania, `campania:${cacheId}`)
 
   await tx.objectStore('meta').put(cache.sincronizado_en, 'ultima_sync')
 
@@ -136,7 +163,8 @@ async function reemplazarCacheEnTx(tx, cache) {
         (operacion) =>
           operacion.tipo === 'ASIGNAR_TICKET' &&
           ['PENDIENTE', 'ERROR'].includes(operacion.estado) &&
-          operacion.payload?.dniCosechador
+          operacion.payload?.dniCosechador &&
+          (operacion.payload.campaniaId ?? '') === cacheId
       )
       .map((operacion) => operacion.payload.dniCosechador)
   )
@@ -249,8 +277,13 @@ export async function agregarRolTrabajador(dni, rol, operacionId = null) {
   return trabajador
 }
 
-export async function marcarJabero(dni, estado, operacionId) {
-  const db = await dbPromise
+export async function marcarJabero(
+  dni,
+  estado,
+  operacionId,
+  campaniaId = obtenerContextoCampania()
+) {
+  const db = (await dbPromise).conCampania(campaniaId)
   const trabajador = await db.get('trabajadores', dni)
   if (!trabajador || trabajador.operacion_jabero_id !== operacionId) return
   trabajador.estado_sync_jabero = estado
@@ -294,8 +327,11 @@ export async function guardarTicketLocal({
   })
 }
 
-export async function marcarTicketSincronizado(codigoTicket) {
-  const db = await dbPromise
+export async function marcarTicketSincronizado(
+  codigoTicket,
+  campaniaId = obtenerContextoCampania()
+) {
+  const db = (await dbPromise).conCampania(campaniaId)
   const ticket = await db.get('tickets', codigoTicket)
 
   if (!ticket) {
@@ -308,8 +344,12 @@ export async function marcarTicketSincronizado(codigoTicket) {
   await db.put('tickets', ticket)
 }
 
-export async function marcarTicketError(codigoTicket, error) {
-  const db = await dbPromise
+export async function marcarTicketError(
+  codigoTicket,
+  error,
+  campaniaId = obtenerContextoCampania()
+) {
+  const db = (await dbPromise).conCampania(campaniaId)
   const ticket = await db.get('tickets', codigoTicket)
 
   if (!ticket) {
@@ -323,14 +363,21 @@ export async function marcarTicketError(codigoTicket, error) {
   await db.put('tickets', ticket)
 }
 
-export async function eliminarTicketLocal(codigoTicket, operacionId) {
-  const db = await dbPromise
+export async function eliminarTicketLocal(
+  codigoTicket,
+  operacionId,
+  campaniaId = obtenerContextoCampania()
+) {
+  const db = (await dbPromise).conCampania(campaniaId)
   const ticket = await db.get('tickets', codigoTicket)
   if (ticket?.operacion_id === operacionId) await db.delete('tickets', codigoTicket)
 }
 
-export async function marcarTicketPendiente(codigoTicket) {
-  const db = await dbPromise
+export async function marcarTicketPendiente(
+  codigoTicket,
+  campaniaId = obtenerContextoCampania()
+) {
+  const db = (await dbPromise).conCampania(campaniaId)
   const ticket = await db.get('tickets', codigoTicket)
   if (!ticket) return
   ticket.estado_sync = 'PENDIENTE'
@@ -346,15 +393,19 @@ export async function obtenerLotes() {
 
 export async function obtenerCampaniaActiva() {
   const db = await dbPromise
-
-  return db.get('meta', 'campania_activa')
+  return db.campaniaId
+    ? db.get('meta', `campania:${db.campaniaId}`)
+    : db.get('meta', 'campania_activa')
 }
 
 // SESIONES Y LECTURAS LOCALES
 
 export async function guardarSesionLocal(sesion) {
   const db = await dbPromise
-  await db.put('sesiones', sesion)
+  await db.put('sesiones', {
+    ...sesion,
+    campania_id: sesion.campania_id ?? db.campaniaId
+  })
 }
 
 export async function obtenerSesionLocal(id) {
@@ -392,20 +443,31 @@ export async function obtenerSesionesActivas(dniOperador) {
   const db = await dbPromise
   const sesiones = await db.getAllFromIndex('sesiones', 'estado', 'ACTIVA')
   await recuperarDniOperadorSesiones(db, sesiones)
-  return sesiones.filter((sesion) => sesion.dni_operador === dniOperador)
+  return sesiones.filter(
+    (sesion) =>
+      sesion.dni_operador === dniOperador &&
+      (sesion.campania_id ?? '') === db.campaniaId
+  )
 }
 
 export async function obtenerSesionesOperador(dniOperador) {
   const db = await dbPromise
   const sesiones = await db.getAll('sesiones')
   await recuperarDniOperadorSesiones(db, sesiones)
-  return sesiones.filter((sesion) => sesion.dni_operador === dniOperador)
+  return sesiones.filter(
+    (sesion) =>
+      sesion.dni_operador === dniOperador &&
+      (sesion.campania_id ?? '') === db.campaniaId
+  )
 }
 
 export async function obtenerSesionActivaJabero(dniJabero) {
   const db = await dbPromise
   const sesiones = await db.getAllFromIndex('sesiones', 'estado', 'ACTIVA')
-  return sesiones.find((sesion) => sesion.dni_jabero === dniJabero)
+  return sesiones.find(
+    (sesion) =>
+      sesion.dni_jabero === dniJabero && (sesion.campania_id ?? '') === db.campaniaId
+  )
 }
 
 export async function cerrarSesionLocal(id) {
@@ -423,7 +485,10 @@ export async function cerrarSesionLocal(id) {
 
 export async function guardarLecturaLocal(lectura) {
   const db = await dbPromise
-  await db.put('lecturas', lectura)
+  await db.put('lecturas', {
+    ...lectura,
+    campania_id: lectura.campania_id ?? db.campaniaId
+  })
 }
 
 export async function marcarLecturaSincronizada(id) {
@@ -484,7 +549,7 @@ async function crearOperacionEnTx(tx, tipo, payload) {
 
     tipo,
 
-    payload,
+    payload: { ...payload, campaniaId: payload.campaniaId ?? tx.campaniaId },
 
     estado: 'PENDIENTE',
 
@@ -554,7 +619,9 @@ export async function registrarJaberoOffline(dniOperador, dniTrabajador) {
   }
   const db = await dbPromise
   const tx = db.transaction(['meta', 'cola', 'trabajadores'], 'readwrite')
-  const campania = await tx.objectStore('meta').get('campania_activa')
+  const campania = await tx
+    .objectStore('meta')
+    .get(tx.campaniaId ? `campania:${tx.campaniaId}` : 'campania_activa')
   const trabajadorActual = await tx.objectStore('trabajadores').get(dniTrabajador)
   if (!campania || (campania.estado && campania.estado !== 'ACTIVA')) {
     throw new Error('No hay una campaña activa en los datos locales.')
@@ -591,11 +658,25 @@ export async function registrarJaberoOffline(dniOperador, dniTrabajador) {
   return operacion
 }
 
+function validarCampaniaSesion(sesion, campaniaId) {
+  if ((sesion.campania_id ?? '') !== campaniaId) {
+    throw new Error('La sesión no pertenece a la campaña seleccionada.')
+  }
+}
+
 export async function iniciarSesionOffline(sesion, dniOperador) {
   const db = await dbPromise
   const tx = db.transaction(['meta', 'cola', 'sesiones'], 'readwrite')
   const activas = await tx.objectStore('sesiones').index('estado').getAll('ACTIVA')
-  if (activas.some((actual) => actual.dni_jabero === sesion.dni_jabero)) {
+  sesion = { ...sesion, campania_id: sesion.campania_id ?? tx.campaniaId }
+  validarCampaniaSesion(sesion, tx.campaniaId)
+  if (
+    activas.some(
+      (actual) =>
+        actual.dni_jabero === sesion.dni_jabero &&
+        (actual.campania_id ?? '') === sesion.campania_id
+    )
+  ) {
     throw new Error('El jabero ya tiene una sesión activa. Continúe esa sesión.')
   }
   const operacion = await crearOperacionEnTx(tx, 'INICIAR_SESION', {
@@ -603,6 +684,7 @@ export async function iniciarSesionOffline(sesion, dniOperador) {
     dniJabero: sesion.dni_jabero,
     loteId: sesion.lote_id,
     variedadId: sesion.variedad_id ?? null,
+    campaniaId: sesion.campania_id,
     sesionId: sesion.id
   })
   await tx.objectStore('sesiones').put(sesion)
@@ -617,14 +699,18 @@ export async function registrarLecturaOffline(lectura, dniOperador) {
   if (!sesion || sesion.estado !== 'ACTIVA') {
     throw new Error('La sesión de lectura ya no está activa.')
   }
+  validarCampaniaSesion(sesion, tx.campaniaId)
   const operacion = await crearOperacionEnTx(tx, 'REGISTRAR_JABA', {
     dniOperador,
     sesionId: lectura.sesion_id,
     codigoTicket: lectura.codigo_ticket,
     lecturaId: lectura.id,
-    fechaHora: lectura.fecha_hora
+    fechaHora: lectura.fecha_hora,
+    campaniaId: sesion.campania_id
   })
-  await tx.objectStore('lecturas').put(lectura)
+  await tx
+    .objectStore('lecturas')
+    .put({ ...lectura, campania_id: sesion.campania_id ?? tx.campaniaId })
   await tx.done
   return operacion
 }
@@ -636,9 +722,11 @@ export async function finalizarSesionOffline(sesionId, dniOperador) {
   if (!sesion || sesion.estado !== 'ACTIVA') {
     throw new Error('La sesión ya fue finalizada.')
   }
+  validarCampaniaSesion(sesion, tx.campaniaId)
   const operacion = await crearOperacionEnTx(tx, 'CERRAR_SESION', {
     dniOperador,
-    sesionId
+    sesionId,
+    campaniaId: sesion.campania_id
   })
   sesion.estado = 'CERRADA'
   sesion.fecha_fin = new Date().toISOString()
@@ -661,7 +749,8 @@ export async function existeTicketPendiente(codigoTicket) {
     (operacion) =>
       operacion.tipo === 'ASIGNAR_TICKET' &&
       operacion.estado !== 'ERROR' &&
-      operacion.payload.codigoTicket === codigoTicket
+      operacion.payload.codigoTicket === codigoTicket &&
+      (operacion.payload.campaniaId ?? '') === db.campaniaId
   )
 }
 
@@ -682,14 +771,15 @@ export async function contarPendientes() {
 
   const pendientes = await db.getAllFromIndex('cola', 'estado', 'PENDIENTE')
 
-  return pendientes.length
+  return pendientes.filter((op) => (op.payload.campaniaId ?? '') === db.campaniaId)
+    .length
 }
 
 export async function contarErrores() {
   const db = await dbPromise
   const errores = await db.getAllFromIndex('cola', 'estado', 'ERROR')
 
-  return errores.length
+  return errores.filter((op) => (op.payload.campaniaId ?? '') === db.campaniaId).length
 }
 
 export async function obtenerColaCompleta() {
@@ -748,10 +838,18 @@ export async function reintentarOperacion(id) {
   operacion.error = null
   await db.put('cola', operacion)
   if (operacion.tipo === 'ASIGNAR_TICKET') {
-    await marcarTicketPendiente(operacion.payload.codigoTicket)
+    await marcarTicketPendiente(
+      operacion.payload.codigoTicket,
+      operacion.payload.campaniaId
+    )
   }
   if (operacion.tipo === 'REGISTRAR_JABERO') {
-    await marcarJabero(operacion.payload.dniTrabajador, 'PENDIENTE', id)
+    await marcarJabero(
+      operacion.payload.dniTrabajador,
+      'PENDIENTE',
+      id,
+      operacion.payload.campaniaId
+    )
   }
   return true
 }
@@ -762,13 +860,18 @@ export async function descartarOperacion(id) {
   const operacion = operaciones.find((item) => item.id === id)
   if (!evaluarDescarteOperacion(operacion, operaciones).permitido) return false
   if (operacion.tipo === 'ASIGNAR_TICKET') {
-    await eliminarTicketLocal(operacion.payload.codigoTicket, id)
+    await eliminarTicketLocal(
+      operacion.payload.codigoTicket,
+      id,
+      operacion.payload.campaniaId
+    )
   } else {
-    const trabajador = await db.get('trabajadores', operacion.payload.dniTrabajador)
+    const local = db.conCampania(operacion.payload.campaniaId ?? '')
+    const trabajador = await local.get('trabajadores', operacion.payload.dniTrabajador)
     if (trabajador?.operacion_jabero_id === id) {
       delete trabajador.estado_sync_jabero
       delete trabajador.operacion_jabero_id
-      await db.put('trabajadores', trabajador)
+      await local.put('trabajadores', trabajador)
     }
   }
   await db.delete('cola', id)

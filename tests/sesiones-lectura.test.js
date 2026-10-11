@@ -206,7 +206,7 @@ test('una sesión guardada sigue disponible desde una nueva conexión a IndexedD
   const sesion = crearSesion('persistida', { dni_operador: '11000003' })
   await guardarSesionLocal(sesion)
 
-  const dbReabierta = await openDB('scc', 3)
+  const dbReabierta = await openDB('scc', 4)
   const guardada = await dbReabierta.get('sesiones', sesion.id)
   dbReabierta.close()
 

@@ -468,6 +468,7 @@ test('LOGIN también espera el DNI completo cuando el último input llega tarde'
     },
     sessionStorage: { setItem() {} },
     mostrarMenu: () => continuaciones++
+    ,prepararIngreso: async () => continuaciones++
   })
   await escanearDniConUltimoDigitoTardio(vista.input)
   assert.deepEqual(errores, [])
@@ -502,7 +503,7 @@ test('INICIAR LECTURA también espera el DNI del jabero y conserva el cero', asy
     'dniJaberoLectura',
     'configurarEnvioScanner(formLecturaTicket,',
     {
-      operador: { dni: '17480378' },
+      operador: { dni: '17480378', campania: { id: 'campania-test' } },
       sesionLectura: null,
       loteLectura: { value: lote.lote_id },
       variedadLectura: { value: '' },
@@ -547,7 +548,7 @@ test('INICIAR LECTURA guarda la variedad seleccionada en un lote con varias vari
   ] }
   const vista = formularioSimulado('formIniciarLectura', 'dniJaberoLectura',
     'configurarEnvioScanner(formLecturaTicket,', {
-      operador: { dni: '17480378' }, sesionLectura: null,
+      operador: { dni: '17480378', campania: { id: 'campania-test' } }, sesionLectura: null,
       loteLectura: { value: lote.lote_id }, variedadLectura: { value: 'v2' },
       mostrarMensajeLectura: (mensaje) => errores.push(mensaje),
       obtenerTrabajador: async () => ({ nombre: 'Ana', roles: ['JABERO'] }),

@@ -5,6 +5,7 @@ import test, { before, after } from 'node:test'
 import { PGlite } from '@electric-sql/pglite'
 import {
   guardarCache,
+  seleccionarCampaniaLocal,
   obtenerLotes,
   iniciarSesionOffline,
   obtenerSesionLocal,
@@ -159,6 +160,7 @@ test('la caché conserva trabajadores, tickets y fecha e incluye ambas variedade
   assert.equal(cache.trabajadores[0].dni, '81000001')
   assert.deepEqual(cache.tickets, [])
   await guardarCache(cache)
+  await seleccionarCampaniaLocal(CAMP)
   const lotes = await obtenerLotes()
   assert.equal(lotes.length, 1)
   assert.deepEqual(new Set(lotes[0].variedades.map((v) => v.id)), new Set([V1, V2]))
