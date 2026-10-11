@@ -58,10 +58,10 @@ test('13. campaña visible se resuelve a UUID', () => assert.equal(prepararLoteP
 test('14. campaña no sincronizada produce error local', () => assert.throws(() => prepararLoteParaGuardarScc_(fila(), [campania({ estadoSync: 'PENDIENTE' })], [variedad()], []), /campaña seleccionada no está sincronizada/i))
 test('15. campaña cerrada no se acepta para nueva asignación', () => assert.throws(() => prepararLoteParaGuardarScc_(fila(), [campania({ estado: 'CERRADA' })], [variedad()], []), /campaña seleccionada no está activa/i))
 test('16. campaña histórica cerrada sin cambio se permite', () => assert.equal(prepararLoteParaGuardarScc_(fila({ idSistema: LOTE_ID }), [campania({ estado: 'CERRADA' })], [variedad()], [remoto({ campaniaEstado: 'CERRADA' })]).p_campania_id, CAMP_ID))
-test('17. variedad visible se resuelve a UUID', () => assert.equal(prepararLoteParaGuardarScc_(fila(), [campania()], [variedad()], []).p_variedad_id, VAR_ID))
+test('17. variedad visible se resuelve a UUID', () => assert.equal(prepararLoteParaGuardarScc_(fila(), [campania()], [variedad()], []).p_variedad_ids[0], VAR_ID))
 test('18. variedad no sincronizada produce error local', () => assert.throws(() => prepararLoteParaGuardarScc_(fila(), [campania()], [variedad({ estadoSync: 'ERROR' })], []), /variedad seleccionada no está sincronizada/i))
 test('19. variedad inactiva no se acepta para nueva asignación', () => assert.throws(() => prepararLoteParaGuardarScc_(fila(), [campania()], [variedad({ activo: 'No' })], []), /variedad seleccionada no está activa/i))
-test('20. variedad histórica inactiva sin cambio se permite', () => assert.equal(prepararLoteParaGuardarScc_(fila({ idSistema: LOTE_ID }), [campania()], [variedad({ activo: 'No' })], [remoto({ variedadActiva: false })]).p_variedad_id, VAR_ID))
+test('20. variedad histórica inactiva sin cambio se permite', () => assert.equal(prepararLoteParaGuardarScc_(fila({ idSistema: LOTE_ID }), [campania()], [variedad({ activo: 'No' })], [remoto({ variedadActiva: false })]).p_variedad_ids[0], VAR_ID))
 
 test('21. onEdit conceptual de LOTES solo acepta A:E desde fila 2', () => {
   assert.equal(debeMarcarPendienteLotesOnEditScc_('LOTES', 2, 1, 5), true)
@@ -101,7 +101,7 @@ test('28. LOTES relee referencias y acepta referencias recién sincronizadas', (
   assert.match(lotesSource, /var campanias = leerFilasCampanias_\(hojaCampanias\);/)
   assert.match(lotesSource, /var variedades = leerFilasVariedades_\(hojaVariedades\);/)
   const p = prepararLoteParaGuardarScc_(fila(), [campania()], [variedad()], [])
-  assert.equal(p.p_campania_id, CAMP_ID); assert.equal(p.p_variedad_id, VAR_ID)
+  assert.equal(p.p_campania_id, CAMP_ID); assert.equal(p.p_variedad_ids[0], VAR_ID)
 })
 test('29. actualizar LOTES detecta PENDIENTE', () => assert.equal(tieneCambiosLocalesNoResueltosScc_([fila()]), true))
 test('30. actualizar LOTES detecta ERROR', () => assert.equal(tieneCambiosLocalesNoResueltosScc_([fila({ estadoSync: 'ERROR' })]), true))
@@ -150,4 +150,44 @@ test('listado SQL incluye históricos y ordena por campaña y código', () => {
   assert.match(listado, /join public\.variedades v on v\.id = l\.variedad_id/)
   assert.match(listado, /order by c\.codigo asc, l\.codigo asc/)
   assert.doesNotMatch(listado, /where\s+l\.activo\s*=\s*true/i)
+})
+
+test('LOTES resuelve varias variedades separadas por punto y coma y elimina duplicados', () => {
+  const payload = prepararLoteParaGuardarScc_(
+    fila({ variedad: ' Ventura ; Biloxi ; Ventura ' }),
+    [campania()], [variedad(), variedad({ nombre: 'Biloxi', idSistema: VAR_ID_2 })], []
+  )
+  assert.deepEqual(Array.from(payload.p_variedad_ids), [VAR_ID, VAR_ID_2])
+  assert.match(lotesSource, /llamarRpcSupabase_\('admin_guardar_lote_variedades', payload\)/)
+})
+
+test('LOTES valida cada variedad sin enviar un conjunto parcialmente válido', () => {
+  assert.throws(() => prepararLoteParaGuardarScc_(
+    fila({ variedad: 'Ventura; No existe' }), [campania()], [variedad()], []
+  ), /no está sincronizada/)
+  assert.throws(() => prepararLoteParaGuardarScc_(
+    fila({ variedad: 'Ventura;' }), [campania()], [variedad()], []
+  ), /variedad es obligatoria/)
+})
+
+test('LOTES conserva las variedades históricas inactivas y rechaza agregar otra inactiva', () => {
+  const referencias = [variedad({ activo: 'No' }), variedad({ nombre: 'Biloxi', idSistema: VAR_ID_2, activo: 'No' })]
+  const original = remoto({ variedadIds: [VAR_ID, VAR_ID_2] })
+  const payload = prepararLoteParaGuardarScc_(
+    fila({ idSistema: LOTE_ID, variedad: 'Ventura; Biloxi' }), [campania()], referencias, [original]
+  )
+  assert.deepEqual(Array.from(payload.p_variedad_ids), [VAR_ID, VAR_ID_2])
+  assert.throws(() => prepararLoteParaGuardarScc_(
+    fila({ idSistema: LOTE_ID, variedad: 'Ventura; Biloxi' }), [campania()], referencias, [remoto()]
+  ), /no está activa/)
+})
+
+test('LOTES reconstruye varias variedades del sistema en una única fila', () => {
+  const [lote] = normalizarListadoLotesScc_({ ok: true, lotes: [{
+    id: LOTE_ID, codigo: 'L1', nombre: null, campania_id: CAMP_ID,
+    campania_codigo: 'CAMP-2026', campania_estado: 'ACTIVA', activo: true,
+    variedades: [{ id: VAR_ID, nombre: 'Ventura', activo: true }, { id: VAR_ID_2, nombre: 'Biloxi', activo: false }]
+  }] })
+  assert.equal(lote.variedad, 'Ventura; Biloxi')
+  assert.deepEqual(Array.from(lote.variedadIds), [VAR_ID, VAR_ID_2])
 })

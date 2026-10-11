@@ -124,7 +124,7 @@ function sincronizarLotes_() {
     campanias,
     variedades,
     lotesOriginales,
-    function (payload) { return llamarRpcSupabase_('admin_guardar_lote', payload); },
+    function (payload) { return llamarRpcSupabase_('admin_guardar_lote_variedades', payload); },
     function () { return new Date(); }
   );
 

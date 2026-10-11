@@ -75,7 +75,15 @@ function prepararLoteParaGuardarScc_(fila, campanias, variedades, lotesOriginale
   var codigo = normalizarCodigoLoteScc_(fila.codigo);
   var nombre = normalizarNombreLoteScc_(fila.nombre);
   var campania = resolverCampaniaLoteScc_(fila.campania, campanias);
-  var variedad = resolverVariedadLoteScc_(fila.variedad, variedades);
+  var nombres = String(fila.variedad == null ? '' : fila.variedad).split(';').map(function (nombre) {
+    return nombre.trim();
+  });
+  if (nombres.some(function (nombre) { return !nombre; })) {
+    throw new Error('La variedad es obligatoria; separe varias variedades con punto y coma');
+  }
+  var seleccionadas = nombres.filter(function (nombre, indice) {
+    return nombres.indexOf(nombre) === indice;
+  }).map(function (nombre) { return resolverVariedadLoteScc_(nombre, variedades); });
   var original = buscarLoteRemotoOriginalScc_(
     fila,
     campania.id,
@@ -83,12 +91,14 @@ function prepararLoteParaGuardarScc_(fila, campanias, variedades, lotesOriginale
     lotesOriginales
   );
   var campaniaCambio = !original || original.campaniaId !== campania.id;
-  var variedadCambio = !original || original.variedadId !== variedad.id;
+  var idsOriginales = original ? (original.variedadIds || [original.variedadId]) : [];
 
   if (campaniaCambio && campania.estado !== 'ACTIVA') {
     throw new Error('La campaña seleccionada no está activa');
   }
-  if (variedadCambio && variedad.activo !== true) {
+  if (seleccionadas.some(function (variedad) {
+    return idsOriginales.indexOf(variedad.id) < 0 && variedad.activo !== true;
+  })) {
     throw new Error('La variedad seleccionada no está activa');
   }
 
@@ -97,7 +107,7 @@ function prepararLoteParaGuardarScc_(fila, campanias, variedades, lotesOriginale
     p_codigo: codigo,
     p_nombre: nombre,
     p_campania_id: campania.id,
-    p_variedad_id: variedad.id,
+    p_variedad_ids: seleccionadas.map(function (variedad) { return variedad.id; }),
     p_activo: normalizarActivoScc_(fila.activo)
   };
 }
@@ -108,8 +118,19 @@ function normalizarLoteListadoScc_(lote) {
   }
   var id = normalizarIdSistemaScc_(lote.id);
   var campaniaId = normalizarIdSistemaScc_(lote.campania_id);
-  var variedadId = normalizarIdSistemaScc_(lote.variedad_id);
-  if (!id || !campaniaId || !variedadId) {
+  var variedades = Array.isArray(lote.variedades) ? lote.variedades : [{
+    id: lote.variedad_id, nombre: lote.variedad, activo: lote.variedad_activa
+  }];
+  variedades = variedades.map(function (variedad) {
+    var variedadId = normalizarIdSistemaScc_(variedad.id);
+    if (!variedadId) throw new Error('Respuesta inválida al listar lotes');
+    return {
+      id: variedadId,
+      nombre: normalizarTextoObligatorioScc_(variedad.nombre, 'Respuesta inválida al listar lotes'),
+      activo: normalizarActivoScc_(variedad.activo)
+    };
+  });
+  if (!id || !campaniaId || !variedades.length) {
     throw new Error('Respuesta inválida al listar lotes');
   }
   return {
@@ -119,9 +140,9 @@ function normalizarLoteListadoScc_(lote) {
     campaniaId: campaniaId,
     campaniaCodigo: normalizarTextoObligatorioScc_(lote.campania_codigo, 'Respuesta inválida al listar lotes'),
     campaniaEstado: String(lote.campania_estado == null ? '' : lote.campania_estado).trim().toUpperCase(),
-    variedadId: variedadId,
-    variedad: normalizarTextoObligatorioScc_(lote.variedad, 'Respuesta inválida al listar lotes'),
-    variedadActiva: normalizarActivoScc_(lote.variedad_activa),
+    variedadIds: variedades.map(function (variedad) { return variedad.id; }),
+    variedad: variedades.map(function (variedad) { return variedad.nombre; }).join('; '),
+    variedadActiva: variedades.every(function (variedad) { return variedad.activo; }),
     activo: normalizarActivoScc_(lote.activo)
   };
 }

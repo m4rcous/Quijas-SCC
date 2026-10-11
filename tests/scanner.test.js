@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { seleccionarVariedadLote } from '../src/modules/variedadesLote.js'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { runInNewContext } from 'node:vm'
@@ -432,6 +433,7 @@ function formularioSimulado(nombreForm, nombreInput, marcadorFin, contextoExtra)
   const contexto = {
     configurarEnvioScanner,
     esDniValido,
+    seleccionarVariedadLote,
     [nombreForm]: form,
     [nombreInput]: input,
     navigator: { onLine: false },
@@ -503,6 +505,7 @@ test('INICIAR LECTURA también espera el DNI del jabero y conserva el cero', asy
       operador: { dni: '17480378' },
       sesionLectura: null,
       loteLectura: { value: lote.lote_id },
+      variedadLectura: { value: '' },
       mostrarMensajeLectura: (mensaje) => errores.push(mensaje),
       obtenerTrabajador: async () => ({ nombre: 'Ana', roles: ['JABERO'] }),
       obtenerSesionActivaJabero: async () => null,
@@ -534,6 +537,36 @@ test('INICIAR LECTURA sin DNI pide ingresar DNI antes de validar lote', async ()
   vista.form.emitir('submit', {})
   await siguienteTurno()
   assert.deepEqual(errores, ['Ingresar DNI.'])
+})
+
+test('INICIAR LECTURA guarda la variedad seleccionada en un lote con varias variedades', async () => {
+  const errores = []
+  const sesiones = []
+  const lote = { lote_id: 'lote-multiple', codigo: 'L2', variedades: [
+    { id: 'v1', nombre: 'Ventura' }, { id: 'v2', nombre: 'Biloxi' }
+  ] }
+  const vista = formularioSimulado('formIniciarLectura', 'dniJaberoLectura',
+    'configurarEnvioScanner(formLecturaTicket,', {
+      operador: { dni: '17480378' }, sesionLectura: null,
+      loteLectura: { value: lote.lote_id }, variedadLectura: { value: 'v2' },
+      mostrarMensajeLectura: (mensaje) => errores.push(mensaje),
+      obtenerTrabajador: async () => ({ nombre: 'Ana', roles: ['JABERO'] }),
+      obtenerSesionActivaJabero: async () => null, obtenerLotes: async () => [lote],
+      crypto: { randomUUID: () => 'sesion-multiple' },
+      iniciarSesionOffline: async (sesion) => sesiones.push(sesion),
+      mostrarSesionLectura: async () => {}
+    })
+  vista.input.value = '01748037'
+  vista.form.emitir('submit', {})
+  await siguienteTurno()
+  assert.deepEqual(errores, [])
+  assert.equal(sesiones[0].variedad_id, 'v2')
+  assert.equal(sesiones[0].variedad, 'Biloxi')
+  vista.contexto.variedadLectura.value = ''
+  vista.form.emitir('submit', {})
+  await siguienteTurno()
+  assert.deepEqual(errores, ['Seleccione una variedad del lote.'])
+  assert.equal(sesiones.length, 1)
 })
 
 test('ASIGNAR TICKET permite otro ticket aunque la sincronización anterior siga pendiente', async () => {

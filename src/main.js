@@ -6,6 +6,10 @@ import { buscarCosechador } from './modules/asignacionTickets'
 import { nombreCosechadorVisible } from './modules/cosechadorLocal'
 import { actualizarCacheOperativa } from './modules/cacheOperativa'
 import {
+  obtenerVariedadesLote,
+  seleccionarVariedadLote
+} from './modules/variedadesLote'
+import {
   contarLecturasCosechador,
   contarLecturasSesion,
   contarErrores,
@@ -215,6 +219,8 @@ const btnVolverMenuLectura = document.querySelector('#btn-volver-menu-lectura')
 const lecturaOperador = document.querySelector('#lectura-operador')
 const configuracionLectura = document.querySelector('#configuracion-lectura')
 const loteLectura = document.querySelector('#lote-lectura')
+const variedadLectura = document.querySelector('#variedad-lectura')
+let lotesLecturaDisponibles = []
 const formIniciarLectura = document.querySelector('#form-iniciar-lectura')
 const dniJaberoLectura = document.querySelector('#dni-jabero-lectura')
 const sesionLecturaActiva = document.querySelector('#sesion-lectura-activa')
@@ -2116,14 +2122,17 @@ function limpiarRegistroJabero() {
 
 async function cargarLotes() {
   loteLectura.disabled = true
+  lotesLecturaDisponibles = []
+  cargarVariedadesLectura()
   loteLectura.innerHTML = '<option value="">Cargando lotes...</option>'
   try {
     const lotes = await obtenerLotes()
+    lotesLecturaDisponibles = lotes
     loteLectura.innerHTML = '<option value="">Seleccione un lote</option>'
     for (const lote of lotes) {
       const option = document.createElement('option')
       option.value = lote.lote_id
-      option.textContent = `${lote.codigo} — ${lote.variedad}`
+      option.textContent = lote.codigo
       loteLectura.appendChild(option)
     }
     loteLectura.disabled = false
@@ -2131,6 +2140,30 @@ async function cargarLotes() {
     mostrarMensajeLectura(error.message, 'error')
   }
 }
+
+function cargarVariedadesLectura() {
+  const lote = lotesLecturaDisponibles.find(
+    (item) => item.lote_id === loteLectura.value
+  )
+  const variedades = obtenerVariedadesLote(lote)
+  variedadLectura.replaceChildren()
+  const placeholder = document.createElement('option')
+  placeholder.value = ''
+  placeholder.textContent = lote
+    ? 'Seleccione una variedad'
+    : 'Seleccione primero un lote'
+  variedadLectura.appendChild(placeholder)
+  for (const variedad of variedades) {
+    const option = document.createElement('option')
+    option.value = variedad.id ?? ''
+    option.textContent = variedad.nombre
+    variedadLectura.appendChild(option)
+    if (variedades.length === 1) option.selected = true
+  }
+  variedadLectura.disabled = !variedades.length
+}
+
+loteLectura.addEventListener('change', cargarVariedadesLectura)
 
 configurarEnvioScanner(formIniciarLectura, dniJaberoLectura, async (dni) => {
   if (!dni) {
@@ -2171,6 +2204,7 @@ configurarEnvioScanner(formIniciarLectura, dniJaberoLectura, async (dni) => {
     if (!lote) {
       throw new Error('El lote seleccionado no está disponible.')
     }
+    const variedad = seleccionarVariedadLote(lote, variedadLectura.value)
 
     const sesionId = crypto.randomUUID()
     const sesion = {
@@ -2178,7 +2212,8 @@ configurarEnvioScanner(formIniciarLectura, dniJaberoLectura, async (dni) => {
       jabero: trabajador.nombre,
       lote_id: lote.lote_id,
       lote_codigo: lote.codigo,
-      variedad: lote.variedad,
+      variedad_id: variedad.id,
+      variedad: variedad.nombre,
       dni_jabero: dni,
       dni_operador: operador.dni,
       estado: 'ACTIVA',

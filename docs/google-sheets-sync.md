@@ -55,6 +55,9 @@ La hoja VARIEDADES usa Nombre y Activo como campos editables y C:F como columnas
 
 ## LOTES
 
+Desde `202610110100_lotes_variedades.sql`, un lote admite varias variedades mediante `public.lote_variedades`. La columna D acepta nombres separados por punto y coma, por ejemplo `Ventura; Biloxi`. Cada fila representa un lote; no duplique filas para agregar variedades. La sincronización usa `admin_guardar_lote_variedades(uuid, varchar, varchar, uuid, uuid[], boolean)`. La descripción de la RPC singular más abajo corresponde al contrato anterior.
+
+
 El esquema confirmado de `public.lotes` usa UUID como identidad persistente y tiene la restricción real `UNIQUE (campania_id, codigo)`. Por tanto, `codigo` no es una identidad global. Cuando no existe ID Sistema, la identidad natural de fallback es exactamente `(campania_id, codigo)`.
 
 La hoja LOTES usa:
@@ -64,7 +67,7 @@ La hoja LOTES usa:
 | A | Código | Editable |
 | B | Nombre | Editable; vacío se persiste como NULL |
 | C | Campaña | Editable; muestra `campanias.codigo` |
-| D | Variedad | Editable; muestra `variedades.nombre` |
+| D | Variedades (separadas por ;) | Editable; muestra uno o varios nombres de `variedades` |
 | E | Activo | Editable; dropdown Sí/No |
 | F | Estado Sync | Técnica |
 | G | Observación | Técnica |
@@ -77,15 +80,15 @@ F:I quedan protegidas. Editar A:E marca F = PENDIENTE, limpia G y conserva H:I. 
 
 La campaña visible se resuelve así: `CAMPANIAS.codigo → CAMPANIAS.ID Sistema → campania_id`.
 
-La variedad visible se resuelve así: `VARIEDADES.nombre → VARIEDADES.ID Sistema → variedad_id`.
+Cada variedad visible se resuelve así: `VARIEDADES.nombre → VARIEDADES.ID Sistema → lote_variedades.variedad_id`. El conjunto de UUID se envía como `p_variedad_ids`.
 
 La fila referenciada debe estar SINCRONIZADA y tener un UUID válido. PostgreSQL persiste los UUID; los textos visibles no son identidad final.
 
 ### Campañas y variedades activas
 
-Para crear un lote o cambiar su `campania_id`, la campaña destino debe estar ACTIVA. Para crear un lote o cambiar su `variedad_id`, la variedad destino debe estar activa.
+Para crear un lote o cambiar su `campania_id`, la campaña destino debe estar ACTIVA. Cada variedad agregada o reactivada debe estar activa. Un lote con sesiones de lectura conserva su campaña para no trasladar su producción histórica.
 
-Un lote histórico puede conservar una campaña que posteriormente quedó CERRADA y una variedad que posteriormente quedó inactiva. Si esos UUID no cambian, se permite editar los demás campos del lote. La validación se aplica a nuevas asignaciones, no a la mera conservación del histórico.
+Un lote histórico puede conservar una campaña que posteriormente quedó CERRADA y variedades que posteriormente quedaron inactivas. Si esas asociaciones se conservan, se permite editar los demás campos del lote. La validación se aplica a nuevas asignaciones, no a la mera conservación del histórico.
 
 `admin_listar_lotes()` incluye lotes activos e inactivos, y también relaciones históricas con campañas cerradas o variedades inactivas.
 
@@ -97,11 +100,11 @@ Las validaciones de Campaña y Variedad permiten conservar visualmente un valor 
 
 ### Cambios de claves visibles
 
-Si se cambia `campanias.codigo` o `variedades.nombre`, las FK de `public.lotes` siguen apuntando a los mismos UUID. LOTES puede mostrar temporalmente el texto anterior hasta ejecutar `SCC → Actualizar desde sistema`. No se implementan cascadas visuales en `onEdit`.
+Si se cambia `campanias.codigo` o `variedades.nombre`, las FK de `public.lotes` y `public.lote_variedades` siguen apuntando a los mismos UUID. LOTES puede mostrar temporalmente el texto anterior hasta ejecutar `SCC → Actualizar desde sistema`. No se implementan cascadas visuales en `onEdit`.
 
 ### Borrado
 
-No se implementa DELETE para LOTES. Para retirar un lote se usa Activo = No, preservando su histórico.
+No se implementa DELETE para LOTES. Para retirar un lote se usa Activo = No, preservando su histórico. Quitar un nombre de D desactiva la asociación correspondiente; no la borra. Cada sesión guarda su propio `variedad_id`, por lo que el histórico sigue mostrando la variedad cosechada.
 
 ## ROLES_CAMPANIA
 
@@ -265,7 +268,7 @@ Las RPC administrativas replican el SQL ya usado por SCC operativo. Una fila de 
 - RESUMEN: `COUNT(lj.id)`, cosechadores distintos, lotes distintos, sesiones distintas, días distintos en el timezone solicitado y `MAX(lj.fecha_hora)`.
 - RANKING: `COUNT(lj.id)` por período, `DENSE_RANK` por `total_jabas DESC` en ambos períodos y última lectura por cosechador. La identidad de comparación es `trabajadores.id`.
 - PRODUCCION_DIARIA: agrupa `(lj.fecha_hora AT TIME ZONE p_zona_horaria)::date`, con jabas, cosechadores y sesiones.
-- PRODUCCION_LOTES: jabas, cosechadores, sesiones y última lectura por lote.
+- PRODUCCION_LOTES: jabas, cosechadores, sesiones y última lectura por combinación de lote y variedad cosechada.
 
 Las RPC operativas existentes de la PWA no se modifican; las versiones administrativas son paralelas y no requieren `p_dni_operador`.
 
@@ -284,3 +287,16 @@ La migración se verifica localmente con PostgreSQL embebido (PGlite), incluyend
 `20261001_admin_roles_campania.sql` crea `admin_guardar_rol_campania(...)` y `admin_listar_roles_campania()`, conserva la identidad `UNIQUE (trabajador_id, campania_id, rol)`, aplica las reglas de vigencia para nuevas asignaciones/reactivaciones/cambios de identidad y recalcula `usuarios_app`. Revoca ejecución de PUBLIC/anon, concede `EXECUTE` únicamente a `authenticated` y solicita `NOTIFY pgrst, 'reload schema'`.
 
 `20260930_admin_reportes_sheets.sql` agrega `puede_consultar_reportes` con `DEFAULT false`, crea `public.autorizar_integracion_reportes()` y las cuatro RPC administrativas de consulta. Revoca acceso de PUBLIC/anon, concede `EXECUTE` únicamente a `authenticated` y solicita `NOTIFY pgrst, 'reload schema'`. La migración no asigna el permiso a ninguna integración existente y no modifica datos remotos por sí sola.
+
+## Actualización a lotes con varias variedades
+
+1. Aplicar `202610110100_lotes_variedades.sql` y luego `202610110200_produccion_lote_variedad.sql` en Supabase, después de las migraciones anteriores.
+2. Actualizar Apps Script con `Config.gs`, `Lotes.gs` y `LotesPure.gs` del repositorio.
+3. Publicar la PWA actualizada y actualizar la caché operativa en cada PDA para obtener las variedades del lote.
+4. En LOTES, escribir por ejemplo `Ventura; Biloxi` en D y ejecutar la sincronización habitual. Al actualizar desde el sistema se reconstruye una sola fila por lote.
+
+La migración copia la variedad actual de cada lote a sus asociaciones y a las sesiones existentes. No puede reconstruir cambios de variedad anteriores que no estaban registrados. El campo antiguo `lotes.variedad_id` queda estable como compatibilidad para cachés y operaciones pendientes anteriores; las nuevas sesiones usan la variedad elegida. Si esa asociación ya fue retirada, se rechaza un inicio pendiente nuevo con ella. Las sesiones ya persistidas se pueden reintentar y conservan su variedad.
+
+`obtener_cache_operativa` conserva el cuerpo original en `obtener_cache_operativa_legacy`, sin permisos de ejecución externos, y reemplaza únicamente el listado de lotes. El RPC base no está versionado: las pruebas locales verifican su contrato con una fixture; no sustituyen la comprobación contra el esquema desplegado. `listar_lotes_activos_v2()` devuelve un lote con un arreglo de variedades activas.
+
+Los reportes PWA y Sheets agrupan por lote y variedad a partir de `sesiones_lectura.variedad_id`, incluyendo asociaciones retiradas. El resumen PWA cuenta UUID de lotes distintos y suma todas las jabas. Ambos pasos SQL son transaccionales.

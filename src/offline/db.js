@@ -602,6 +602,7 @@ export async function iniciarSesionOffline(sesion, dniOperador) {
     dniOperador,
     dniJabero: sesion.dni_jabero,
     loteId: sesion.lote_id,
+    variedadId: sesion.variedad_id ?? null,
     sesionId: sesion.id
   })
   await tx.objectStore('sesiones').put(sesion)

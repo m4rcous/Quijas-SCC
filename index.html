@@ -712,13 +712,34 @@
                   <p>Seleccione el lote de trabajo</p>
                 </div>
               </div>
-              <select id="lote-lectura" class="select-grande">
+              <select
+                id="lote-lectura"
+                class="select-grande"
+                aria-label="Lote de trabajo"
+              >
                 <option value="">Cargando lotes...</option>
               </select>
             </div>
             <div class="card step-card step-card--active">
               <div class="cabecera-card">
                 <div class="paso-numero">2</div>
+                <div>
+                  <h2>Variedad</h2>
+                  <p>Seleccione la variedad que se cosecha en el lote</p>
+                </div>
+              </div>
+              <select
+                id="variedad-lectura"
+                class="select-grande"
+                aria-label="Variedad a cosechar"
+                disabled
+              >
+                <option value="">Seleccione primero un lote</option>
+              </select>
+            </div>
+            <div class="card step-card step-card--active">
+              <div class="cabecera-card">
+                <div class="paso-numero">3</div>
                 <div>
                   <h2>Jabero</h2>
                   <p>Escanee el DNI del encargado</p>

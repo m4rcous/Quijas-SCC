@@ -109,7 +109,7 @@ var SCC_ENCABEZADOS_LOTES = [
   'Código',
   'Nombre',
   'Campaña',
-  'Variedad',
+  'Variedades (separadas por ;)',
   'Activo',
   'Estado Sync',
   'Observación',

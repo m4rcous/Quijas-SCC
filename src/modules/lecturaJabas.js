@@ -1,7 +1,7 @@
 import { supabase } from '../supabase'
 
 export async function listarLotesActivos() {
-  const { data, error } = await supabase.rpc('listar_lotes_activos')
+  const { data, error } = await supabase.rpc('listar_lotes_activos_v2')
 
   if (error) {
     throw error
@@ -14,13 +14,15 @@ export async function iniciarSesionLectura({
   dniOperador,
   dniJabero,
   loteId,
+  variedadId,
   sesionId
 }) {
   const { data, error } = await supabase.rpc('iniciar_sesion_lectura', {
     p_dni_operador: dniOperador,
     p_dni_jabero: dniJabero,
     p_lote_id: loteId,
-    p_sesion_id: sesionId
+    p_sesion_id: sesionId,
+    ...(variedadId ? { p_variedad_id: variedadId } : {})
   })
 
   if (error) {

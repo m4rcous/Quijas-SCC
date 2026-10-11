@@ -35,6 +35,7 @@ export function normalizarProduccionLotes(data) {
       lote_codigo: String(fila.lote_codigo ?? '').trim(),
       lote_nombre: String(fila.lote_nombre ?? '').trim(),
       variedad: String(fila.variedad ?? '').trim(),
+      ...(fila.variedad_id ? { variedad_id: String(fila.variedad_id).trim() } : {}),
       total_jabas: numeroSeguro(fila.total_jabas),
       total_cosechadores: numeroSeguro(fila.total_cosechadores),
       total_sesiones: numeroSeguro(fila.total_sesiones),
@@ -70,19 +71,26 @@ export function ordenarProduccionLotes(
   const filas = produccion.map((fila) => ({ ...fila }))
 
   if (orden === ORDEN_PRODUCCION_LOTES.AZ) {
-    return filas.sort((a, b) => compararTexto(a.lote_codigo, b.lote_codigo))
+    return filas.sort(
+      (a, b) =>
+        compararTexto(a.lote_codigo, b.lote_codigo) ||
+        compararTexto(a.variedad, b.variedad)
+    )
   }
 
   return filas.sort((a, b) => {
     const porJabas = numeroSeguro(b.total_jabas) - numeroSeguro(a.total_jabas)
     if (porJabas !== 0) return porJabas
-    return compararTexto(a.lote_codigo, b.lote_codigo)
+    return (
+      compararTexto(a.lote_codigo, b.lote_codigo) ||
+      compararTexto(a.variedad, b.variedad)
+    )
   })
 }
 
 export function resumirProduccionLotes(produccion) {
   return {
-    lotes: produccion.length,
+    lotes: new Set(produccion.map((fila) => fila.lote_id)).size,
     jabas: produccion.reduce((total, fila) => total + numeroSeguro(fila.total_jabas), 0)
   }
 }
