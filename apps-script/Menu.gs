@@ -1,6 +1,7 @@
 function crearMenuScc_() {
   SpreadsheetApp.getUi()
     .createMenu('SCC')
+    .addItem('Ver campaña de este archivo', 'menuMostrarCampaniaArchivo')
     .addItem('Sincronizar datos', 'menuSincronizarDatos')
     .addItem('Actualizar desde sistema', 'menuActualizarDesdeSistema')
     .addItem('Actualizar reportes', 'menuActualizarReportes')

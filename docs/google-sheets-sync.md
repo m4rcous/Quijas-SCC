@@ -1,5 +1,7 @@
 # Sincronización SCC con Google Sheets
 
+Desde `202610110500_sheets_por_campania.sql`, cada archivo utiliza una campaña fija y RPC `*_hoja` con permisos por integración y campaña. La configuración vigente y el acceso por correo están en [Sheets por campaña](sheets-por-campania.md). Los contratos globales descritos abajo corresponden a la integración anterior y requieren acceso global explícito; los archivos de campaña utilizan los adaptadores nuevos.
+
 PostgreSQL en Supabase es la fuente oficial. Google Sheets funciona como interfaz administrativa para maestros y como salida manual de reportes.
 
 Hay dos sentidos separados:

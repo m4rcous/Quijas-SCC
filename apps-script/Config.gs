@@ -69,7 +69,9 @@ var SCC_CONFIG = Object.freeze({
     supabaseUrl: 'SUPABASE_URL',
     publishableKey: 'SUPABASE_PUBLISHABLE_KEY',
     integrationEmail: 'SUPABASE_INTEGRATION_EMAIL',
-    integrationPassword: 'SUPABASE_INTEGRATION_PASSWORD'
+    integrationPassword: 'SUPABASE_INTEGRATION_PASSWORD',
+    campaniaId: 'SCC_CAMPANIA_ID',
+    spreadsheetId: 'SCC_SPREADSHEET_ID'
   })
 });
 

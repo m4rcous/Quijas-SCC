@@ -49,7 +49,8 @@ function obtenerTokenSupabase_() {
 }
 
 function llamarRpcSupabase_(nombre, payload) {
-  return llamarRpcSupabaseConReintento_(nombre, payload || {}, false);
+  var peticion = prepararRpcArchivoScc_(nombre, payload);
+  return llamarRpcSupabaseConReintento_(peticion.nombre, peticion.payload, false);
 }
 
 function llamarRpcSupabaseConReintento_(nombre, payload, reintentado) {

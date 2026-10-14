@@ -32,11 +32,9 @@ IndexedDB pasa de versión 3 a 4, conserva registros y operaciones y obtiene la 
 
 Para preparar Mandarina, crear su campaña y variedades con el UUID de cultivo `a1000000-0000-4000-8000-000000000002`, asociar sus variedades a sus lotes y asignar al personal mediante `trabajador_campania_rol`. La asignación usa el mismo trabajador existente por DNI; el acceso en `usuarios_app` debe estar activo conforme a la regla de roles existente. El esquema conserva `campania_id` en lotes y asignaciones de personal y añade `cultivo_id` a campañas y variedades.
 
-## Google Sheets pendiente
+## Google Sheets por campaña
 
-Los archivos de Apps Script no se modifican en esta etapa. Falta incorporar la selección de campaña según el correo y agregar el cultivo a los flujos administrativos que crean campañas y variedades. Los RPC administrativos antiguos pueden editar por UUID los registros existentes; las altas antiguas sin cultivo explícito siguen utilizando Arándanos.
-
-Los reportes administrativos que antes elegían una única campaña activa requieren contexto cuando existen varias: devuelven un error solicitando la campaña, en lugar de devolver datos de una campaña elegida arbitrariamente. La integración de Sheets debe adaptarse antes de consultar esos reportes con varias campañas activas.
+La adaptación de Apps Script utiliza un archivo por campaña y permisos de Google Drive por correo. La migración `202610110500_sheets_por_campania.sql` agrega permisos de integración por campaña y los RPC `*_hoja` para maestros y reportes. Cada archivo envía su UUID de campaña; las variedades se crean dentro de su cultivo. La preparación de los archivos, cuentas y permisos está en [Sheets por campaña](sheets-por-campania.md).
 
 ## Verificación local
 
