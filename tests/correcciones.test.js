@@ -1,4 +1,5 @@
 import 'fake-indexeddb/auto'
+import * as lookupDb from '../src/offline/db.js'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -8,9 +9,9 @@ import {
   evaluarDescarteOperacion
 } from '../src/offline/cola.js'
 import { esErrorTemporal } from '../src/offline/errores.js'
-import { validarOperadorConFuentes } from '../src/modules/authLogic.js'
-import { fechaOperativa } from '../src/modules/fechaOperativa.js'
-import { buscarCosechadorLocal } from '../src/modules/cosechadorLocal.js'
+import { validarOperadorConFuentes } from '../src/contexts/identity-access/application/authLogic.js'
+import { fechaOperativa } from '../src/contexts/identity-access/domain/fechaOperativa.js'
+import { crearBuscarCosechadorLocal } from '../src/contexts/workforce/index.js'
 import { archivoExcluido, contenidoSensible } from '../scripts/filtros-exportacion.js'
 import {
   actualizarOperacion,
@@ -40,6 +41,11 @@ import {
   obtenerTrabajador,
   reintentarOperacion
 } from '../src/offline/db.js'
+
+const buscarCosechadorLocal = crearBuscarCosechadorLocal({
+  trabajadores: { obtener: lookupDb.obtenerTrabajador },
+  campaignManagement: { obtenerActiva: lookupDb.obtenerCampaniaActiva }
+})
 
 test('fallos temporales se reintentan, rechazos quedan en ERROR y bloquean operaciones posteriores', async () => {
   const llamadas = []
@@ -224,16 +230,15 @@ test('login usa caché únicamente para fallo de red', async () => {
     (await validarOperadorConFuentes('12345678', caida, local, guardar)).offline,
     true
   )
-  const rechazo = async () => ({
-    data: null,
-    error: { status: 403, message: 'No autorizado' }
-  })
+  const rechazo = async () => {
+    throw Object.assign(new Error('No autorizado'), { status: 403 })
+  }
   await assert.rejects(
     validarOperadorConFuentes('12345678', rechazo, local, guardar),
     (error) => error.status === 403
   )
   await assert.rejects(
-    validarOperadorConFuentes('12345678', async () => ({ data: null }), local, guardar),
+    validarOperadorConFuentes('12345678', async () => null, local, guardar),
     /no autorizó/
   )
 })

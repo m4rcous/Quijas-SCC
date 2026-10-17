@@ -1,5 +1,10 @@
 # Un archivo de Sheets por campaña
 
+**Estado actual F7.7:** Portal Web es la interfaz administrativa actual.
+No desarrollar nuevas funcionalidades en Apps Script. Los pasos siguientes
+documentan la compatibilidad legacy para campañas sin cutover y consulta histórica;
+no rehabilitan escritura en una campaña migrada. Véase [retirada progresiva y matriz](portal-cutover-administrativo-f7.7.md).
+
 Cada archivo trabaja con una campaña fija. El correo de Google determina a qué archivos puede acceder una persona mediante **Compartir** en Drive. Un supervisor de ambas campañas recibe acceso a ambos archivos; su DNI y UUID de trabajador siguen siendo únicos en Supabase.
 
 No se cargan datos diferentes en un mismo archivo según quién lo abre. No se introduce un segundo login dentro de Sheets ni se intenta detectar el correo desde `onOpen`. El archivo ya está protegido por la sesión de Google y su lista de personas autorizadas.

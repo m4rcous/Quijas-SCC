@@ -1,9 +1,10 @@
+import { crearSupabaseBackend } from '../src/infrastructure/supabase/backendAdapter.js'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test, { before, after } from 'node:test'
 import { PGlite } from '@electric-sql/pglite'
-import { fechaOperativa } from '../src/modules/fechaOperativa.js'
-import { obtenerRankingCosechadores } from '../src/modules/rankingCosechadores.js'
+import { fechaOperativa } from '../src/contexts/identity-access/domain/fechaOperativa.js'
+import { obtenerRankingCosechadores } from '../src/contexts/harvest/application/reports/rankingCosechadores.js'
 
 const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf8')
 const migration = (name) => read('../supabase/migrations/' + name)
@@ -128,14 +129,16 @@ test('ranking calcula hoy, semana desde lunes, mes y campaña según Lima con l�
   ]) {
     const resultado = await obtenerRankingCosechadores(
       supervisor,
-      async (name, args) => {
-        assert.equal(name, 'obtener_ranking_cosechadores_periodo')
-        const { rows } = await db.query(
-          'select public.obtener_ranking_cosechadores_periodo($1::varchar,$2::text) as resultado',
-          [args.p_dni_operador, args.p_periodo]
-        )
-        return { data: rows[0].resultado }
-      },
+      crearSupabaseBackend({
+        rpc: async (name, args) => {
+          assert.equal(name, 'obtener_ranking_cosechadores_periodo')
+          const { rows } = await db.query(
+            'select public.obtener_ranking_cosechadores_periodo($1::varchar,$2::text) as resultado',
+            [args.p_dni_operador, args.p_periodo]
+          )
+          return { data: rows[0].resultado }
+        }
+      }).obtenerRankingCosechadores,
       periodo
     )
     const esperado =

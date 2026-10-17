@@ -11,7 +11,7 @@ import {
   ordenarProduccionLotes,
   reemplazarProduccionLotes,
   resumirProduccionLotes
-} from '../src/modules/produccionLotes.js'
+} from '../src/contexts/harvest/application/reports/produccionLotes.js'
 
 const respuestaBase = {
   ok: true,
@@ -76,7 +76,10 @@ test('busca por código de lote ignorando mayúsculas y espacios', () => {
 
 test('busca por nombre del lote', () => {
   const produccion = normalizarProduccionLotes(respuestaBase).produccion
-  assert.equal(buscarProduccionLotes(produccion, 'sector sur')[0].lote_codigo, 'LOTE-001')
+  assert.equal(
+    buscarProduccionLotes(produccion, 'sector sur')[0].lote_codigo,
+    'LOTE-001'
+  )
 })
 
 test('busca por variedad', () => {
@@ -120,9 +123,14 @@ test('una respuesta vacía produce resumen vacío', () => {
   assert.deepEqual(resumirProduccionLotes(resultado.produccion), { lotes: 0, jabas: 0 })
 })
 
-test('propaga el error de la RPC', async () => {
-  const rpc = async () => ({ data: null, error: { message: 'RPC no disponible' } })
-  await assert.rejects(obtenerProduccionLotes('12345678', rpc), /RPC no disponible/)
+test('propaga el error de la consulta', async () => {
+  const consultar = async () => {
+    throw new Error('RPC no disponible')
+  }
+  await assert.rejects(
+    obtenerProduccionLotes('12345678', consultar),
+    /RPC no disponible/
+  )
 })
 
 test('formatea la última lectura en hora local del dispositivo', () => {
@@ -134,19 +142,16 @@ test('formatea la última lectura en hora local del dispositivo', () => {
   assert.equal(formatearUltimaLecturaLote(anterior, ahora), '29/09 16:18')
 })
 
-test('la llamada usa la RPC de producción por lote con el operador', async () => {
+test('la consulta de producción por lote recibe el operador', async () => {
   let llamada
-  const rpc = async (nombre, parametros) => {
-    llamada = { nombre, parametros }
-    return { data: respuestaBase, error: null }
+  const consultar = async (parametros) => {
+    llamada = parametros
+    return respuestaBase
   }
 
-  await obtenerProduccionLotes('12345678', rpc)
+  await obtenerProduccionLotes('12345678', consultar)
 
-  assert.deepEqual(llamada, {
-    nombre: 'obtener_produccion_lotes',
-    parametros: { p_dni_operador: '12345678' }
-  })
+  assert.deepEqual(llamada, { dniOperador: '12345678' })
 })
 
 test('la migración conserva las reglas de conteo y agrupación por lote', async () => {
@@ -156,7 +161,10 @@ test('la migración conserva las reglas de conteo y agrupación por lote', async
   )
 
   assert.match(sql, /count\(lj\.id\)::bigint as total_jabas/i)
-  assert.match(sql, /count\(distinct at\.cosechador_rol_id\)::bigint as total_cosechadores/i)
+  assert.match(
+    sql,
+    /count\(distinct at\.cosechador_rol_id\)::bigint as total_cosechadores/i
+  )
   assert.match(sql, /count\(distinct lj\.sesion_id\)::bigint as total_sesiones/i)
   assert.match(sql, /max\(lj\.fecha_hora\) as ultima_lectura/i)
   assert.match(sql, /where l\.campania_id = v_campania_id/i)

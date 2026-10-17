@@ -26,7 +26,7 @@ import {
   obtenerTickets,
   obtenerTrabajador
 } from '../src/offline/db.js'
-import { filtrarAsignacionesHoy } from '../src/modules/asignadosHoy.js'
+import { filtrarAsignacionesHoy } from '../src/contexts/harvest/application/queries/asignadosHoy.js'
 
 test('una asignación offline nueva queda disponible para Asignados hoy', async () => {
   const ahora = new Date(2026, 8, 30, 12, 0, 0)
@@ -88,6 +88,7 @@ test('los tickets del caché se pueden consultar por código', async () => {
   })
 
   assert.deepEqual(await obtenerTicket('CACHE123'), {
+    tenant_id: '00000000-0000-4000-8000-000000000001',
     campania_id: '',
     codigo_ticket: 'CACHE123',
     fecha_asignacion: null,

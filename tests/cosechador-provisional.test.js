@@ -1,4 +1,5 @@
 import 'fake-indexeddb/auto'
+import * as lookupDb from '../src/offline/db.js'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -13,9 +14,9 @@ import {
   obtenerTrabajador
 } from '../src/offline/db.js'
 import {
-  buscarCosechadorLocal,
+  crearBuscarCosechadorLocal,
   nombreCosechadorVisible
-} from '../src/modules/cosechadorLocal.js'
+} from '../src/contexts/workforce/index.js'
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 const migration = fs.readFileSync(
@@ -28,6 +29,11 @@ const migration = fs.readFileSync(
   ),
   'utf8'
 )
+
+const buscarCosechadorLocal = crearBuscarCosechadorLocal({
+  trabajadores: { obtener: lookupDb.obtenerTrabajador },
+  campaignManagement: { obtenerActiva: lookupDb.obtenerCampaniaActiva }
+})
 
 async function cargarCache(trabajadores = []) {
   await seleccionarCampaniaLocal('campania-provisional')
@@ -94,7 +100,9 @@ test('asignación offline crea un solo ASIGNAR_TICKET y persiste cosechador prov
   })
 
   const despues = await obtenerColaCompleta()
-  const nuevas = despues.filter((item) => !antes.some((previa) => previa.id === item.id))
+  const nuevas = despues.filter(
+    (item) => !antes.some((previa) => previa.id === item.id)
+  )
   const trabajador = await obtenerTrabajador('74821564')
 
   assert.equal(nuevas.length, 1)

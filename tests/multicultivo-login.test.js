@@ -1,11 +1,10 @@
+import { casosDeUsoParaVista } from './helpers/casosDeUso.js'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import vm from 'node:vm'
-import {
-  resolverCampaniaOperador,
-  parametrosCampania
-} from '../src/modules/campaniaOperador.js'
+import { resolverCampaniaOperador } from '../src/contexts/campaign-management/domain/campaniaOperador.js'
+import { parametrosCampania } from '../src/infrastructure/supabase/campania.js'
 
 const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
 const node = () => ({
@@ -55,6 +54,7 @@ function login(opciones, { offline = false, disponibles = ['A', 'B'] } = {}) {
     produccionDiariaActual: [],
     rankingCosechadoresActual: []
   })
+  ctx.casosDeUso = casosDeUsoParaVista(ctx)
   vm.runInContext(
     main.slice(
       main.indexOf('async function prepararIngreso('),

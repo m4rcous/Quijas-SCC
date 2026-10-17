@@ -27,6 +27,21 @@ export function mostrarContadorCosechador(
     : '0'
 }
 
+// Reconciliar contadores no limpia un escaneo en curso ni oculta un rechazo.
+export async function actualizarTotalesLecturaEnVista(sesion, ui, consultas) {
+  const total = await consultas.contarLecturasSesion(sesion.sesion_id)
+  const ultima = await consultas.obtenerUltimaLecturaSesion(sesion.sesion_id)
+  const cantidad = ultima
+    ? await consultas.contarLecturasCosechador(sesion.sesion_id, ultima.cosechador_dni)
+    : 0
+  const nombre = ultima
+    ? ultima.cosechador ||
+      (await consultas.obtenerTrabajador(ultima.cosechador_dni))?.nombre
+    : null
+  ui.totalSesion.textContent = total
+  mostrarContadorCosechador(nombre, cantidad, ui)
+}
+
 export async function mostrarSesionLecturaEnVista(
   sesion,
   {

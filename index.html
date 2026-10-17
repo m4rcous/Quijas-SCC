@@ -62,6 +62,7 @@
           <div class="login-copy">
             <h1>Sistema de Control de Cosecha</h1>
             <p class="subtitulo">Identifique al operador para continuar</p>
+            <p class="subtitulo">DNI: compatibilidad provisional del PDA.</p>
           </div>
           <form id="form-login" class="form-stack">
             <label for="dni-operador">DNI del operador</label>
@@ -90,6 +91,173 @@
             <button type="submit" class="btn-primary">Ingresar</button>
           </form>
           <div id="login-mensaje" class="mensaje" aria-live="polite"></div>
+          <button id="btn-ingreso-cuenta" type="button" class="btn-secondary">
+            Ingresar con cuenta GesGROW
+          </button>
+        </div>
+      </section>
+
+      <section id="vista-acceso-empresa" class="pantalla pantalla-login oculto">
+        <div class="login-card card">
+          <h1>Cuenta GesGROW</h1>
+          <form id="form-cuenta" class="form-stack">
+            <label for="cuenta-email">Correo</label>
+            <input id="cuenta-email" type="email" autocomplete="username" required />
+            <label for="cuenta-password">Contraseña</label>
+            <input
+              id="cuenta-password"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
+            <button type="submit" class="btn-primary">Ingresar</button>
+          </form>
+          <p id="cuenta-mensaje" class="mensaje" aria-live="polite"></p>
+          <div
+            id="cuenta-empresas"
+            class="form-stack"
+            aria-label="Empresas autorizadas"
+          ></div>
+          <div id="cuenta-panel" class="oculto form-stack">
+            <p id="cuenta-modulos"></p>
+            <h2 id="cuenta-empresa-activa"></h2>
+            <p id="cuenta-usuario"></p>
+            <button
+              id="btn-cuenta-campanias"
+              data-permiso="harvest.view"
+              data-modulo="HARVEST"
+              type="button"
+              class="btn-secondary"
+            >
+              Ver campañas
+            </button>
+            <button
+              id="btn-cuenta-trabajadores"
+              data-permiso="workforce.manage"
+              data-modulo="WORKFORCE"
+              type="button"
+              class="btn-secondary"
+            >
+              Ver trabajadores
+            </button>
+            <button
+              id="btn-cuenta-equipo"
+              data-permiso="company.manage"
+              type="button"
+              class="btn-secondary"
+            >
+              Equipo y accesos
+            </button>
+            <label for="cuenta-campania">Campaña para reportes</label>
+            <select id="cuenta-campania"></select>
+            <button
+              id="btn-cuenta-reporte"
+              data-permiso="reports.view"
+              data-modulo="HARVEST"
+              type="button"
+              class="btn-primary"
+            >
+              Resumen de cosecha
+            </button>
+            <div id="cuenta-contenido" class="table-scroll"></div>
+            <button
+              id="btn-cuenta-comercial"
+              class="btn-secondary oculto"
+              type="button"
+            >
+              Administrar suscripción
+            </button>
+            <section id="cuenta-comercial" class="oculto form-stack">
+              <h3>Suscripción y módulos</h3>
+              <p id="cuenta-comercial-resumen"></p>
+              <form id="form-cuenta-comercial" class="form-stack">
+                <label for="cuenta-comercial-accion">Cambio comercial</label>
+                <select id="cuenta-comercial-accion">
+                  <option value="crearSuscripcion">Crear suscripción</option>
+                  <option value="cambiarPlan">Cambiar plan</option>
+                  <option value="renovarSuscripcion">Renovar suscripción</option>
+                  <option value="suspenderSuscripcion">Suspender suscripción</option>
+                  <option value="reactivarSuscripcion">Reactivar suscripción</option>
+                  <option value="cancelarSuscripcion">
+                    Cancelar suscripción definitivamente
+                  </option>
+                  <option value="habilitarModulo">Habilitar módulo / add-on</option>
+                  <option value="deshabilitarModulo">Deshabilitar módulo</option>
+                </select>
+                <div class="form-stack" data-acciones="crearSuscripcion cambiarPlan">
+                  <label for="cuenta-comercial-plan">Plan</label>
+                  <select id="cuenta-comercial-plan"></select>
+                </div>
+                <div class="form-stack" data-acciones="crearSuscripcion">
+                  <label for="cuenta-comercial-estado">Estado inicial</label>
+                  <select id="cuenta-comercial-estado">
+                    <option value="ACTIVA">Activa</option>
+                    <option value="TRIAL">Trial</option>
+                  </select>
+                </div>
+                <div
+                  class="form-stack"
+                  data-acciones="crearSuscripcion renovarSuscripcion habilitarModulo"
+                >
+                  <label for="cuenta-comercial-hasta"
+                    >Vigencia hasta (hora local)</label
+                  >
+                  <input id="cuenta-comercial-hasta" type="datetime-local" />
+                </div>
+                <div
+                  class="form-stack"
+                  data-acciones="habilitarModulo deshabilitarModulo"
+                >
+                  <label for="cuenta-comercial-modulo">Módulo</label>
+                  <select id="cuenta-comercial-modulo">
+                    <option value="HARVEST">HARVEST</option>
+                    <option value="CAMPAIGN">CAMPAIGN</option>
+                    <option value="WORKFORCE">WORKFORCE</option>
+                  </select>
+                </div>
+                <div class="form-stack" data-acciones="habilitarModulo">
+                  <label for="cuenta-comercial-origen">Origen</label>
+                  <select id="cuenta-comercial-origen">
+                    <option value="ADD_ON">Add-on</option>
+                    <option value="EXCEPCION">Excepción</option>
+                  </select>
+                </div>
+                <label for="cuenta-comercial-effective"
+                  >Aplicar desde (hora local; vacío = ahora)</label
+                >
+                <input id="cuenta-comercial-effective" type="datetime-local" />
+                <label for="cuenta-comercial-motivo">Motivo del cambio</label>
+                <textarea id="cuenta-comercial-motivo" required></textarea>
+                <input id="cuenta-comercial-operacion" type="hidden" />
+                <button
+                  id="btn-cuenta-comercial-aplicar"
+                  class="btn-primary"
+                  type="submit"
+                >
+                  Registrar cambio
+                </button>
+                <button
+                  id="btn-cuenta-comercial-nueva"
+                  class="btn-secondary"
+                  type="button"
+                >
+                  Preparar otro cambio
+                </button>
+              </form>
+              <p id="cuenta-comercial-mensaje" role="status"></p>
+              <button
+                id="btn-cuenta-comercial-refrescar"
+                class="btn-secondary"
+                type="button"
+              >
+                Actualizar historial
+              </button>
+              <div id="cuenta-comercial-historial" class="table-scroll"></div>
+            </section>
+          </div>
+          <button id="btn-cuenta-salir" class="btn-secondary" type="button">
+            Salir y volver al ingreso PDA
+          </button>
         </div>
       </section>
 
@@ -980,6 +1148,6 @@
         </div>
       </form>
     </dialog>
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="/src/bootstrap.js"></script>
   </body>
 </html>

@@ -1,3 +1,6 @@
+// LEGACY de compatibilidad en retirada progresiva. Portal Web es la interfaz
+// administrativa actual. No desarrollar nuevas funcionalidades en Apps Script.
+// Ver README.md y el cutover administrativo F7.7 antes de retirar un archivo.
 var SCC_CONFIG = Object.freeze({
   hojaTrabajadores: 'TRABAJADORES',
   hojaCampanias: 'CAMPANIAS',

@@ -11,7 +11,10 @@ const USER_A = '10000000-0000-4000-8000-000000000001'
 const USER_B = '10000000-0000-4000-8000-000000000002'
 const USER_REPORT = '10000000-0000-4000-8000-000000000003'
 const USER_BOTH = '10000000-0000-4000-8000-000000000004'
+const USER_COMERCIAL = '10000000-0000-4000-8000-000000000064'
 const shared = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+const TENANT_B = '00000000-0000-4000-8000-000000000012'
+const CAMPANIA_TENANT_B = '00000000-0000-4000-8000-000000000013'
 const VA = '11111111-1111-4111-8111-111111111111'
 let VB, LB, workerA, workerB, roleB
 const call = async (name, args = []) => {
@@ -100,6 +103,21 @@ before(async () => {
     [shared, B]
   )
   await db.exec(read('../supabase/migrations/202610110500_sheets_por_campania.sql'))
+  // Los mismos flujos de archivos/Apps Script se verifican después de F6.1.
+  for (const name of [
+    '202610140100_harvest_tickets.sql',
+    '202610140200_harvest_asignar_lote.sql',
+    '202610140250_workforce_jabero_campania.sql',
+    '202610140300_harvest_registrar_cosecha.sql',
+    '202610140400_harvest_snapshot.sql',
+    '202610140500_harvest_compatibilidad_v4.sql',
+    '202610140600_harvest_cutover.sql',
+    '202610140610_harvest_proyecciones.sql',
+    '202610140700_platform_tenants.sql',
+    '202610140800_identity_access.sql',
+    '202610140900_platform_suscripciones.sql'
+  ])
+    await db.exec(read('../supabase/migrations/' + name))
   for (const [id, maestros, reportes, campañas] of [
     [USER_A, true, true, [A]],
     [USER_B, true, true, [B]],
@@ -116,6 +134,76 @@ before(async () => {
         [campania, id]
       )
   }
+  await login(USER_A)
+  // Datos existentes provisionados en F6.3, preservados por el baseline F6.4.
+  await db.query(
+    "insert into tenants(id,nombre,codigo) values($1,'Empresa B','EMPRESA-B')",
+    [TENANT_B]
+  )
+  await db.query(
+    "select platform_crear_suscripcion($1,'00000000-0000-4000-8000-000000000063','ACTIVA',statement_timestamp(),null)",
+    [TENANT_B]
+  )
+  await db.query(
+    "insert into campanias(id,tenant_id,codigo,nombre,estado) values($1,$2,'EMPRESA-B-C','Empresa B','ACTIVA')",
+    [CAMPANIA_TENANT_B, TENANT_B]
+  )
+  await db.exec(read('../supabase/migrations/202610141000_platform_ciclo_vida.sql'))
+  await db.exec(read('../supabase/migrations/202610141100_portal_identity_admin.sql'))
+  await db.exec(
+    read('../supabase/migrations/202610141200_portal_campaign_workforce.sql')
+  )
+  await db.exec(read('../supabase/migrations/202610141300_portal_harvest_admin.sql'))
+  await db.exec(read('../supabase/migrations/202610141400_portal_reportes.sql'))
+  await db.exec(read('../supabase/migrations/202610141500_portal_suscripcion.sql'))
+  await db.exec(
+    read('../supabase/migrations/202610141600_portal_cutover_administrativo.sql')
+  )
+  await login(USER_COMERCIAL)
+  await db.exec(read('../supabase/migrations/202610141700_farm_structure.sql'))
+  const perfil = await call('iam_obtener_identidad')
+  const tenant = '00000000-0000-4000-8000-000000000001'
+  await db.query(
+    `with m as (insert into identity_membresias(usuario_id,tenant_id) values($1,$2) returning id)
+    insert into identity_membresia_roles(tenant_id,membresia_id,rol_id)
+    select $2,m.id,r.id from m cross join identity_roles r where r.tenant_id=$2 and r.codigo='ADMIN_EMPRESA'`,
+    [perfil.usuario.id, tenant]
+  )
+  await db.query(
+    'insert into platform_delegaciones_comerciales(tenant_id,usuario_id) values($1,$2)',
+    [tenant, perfil.usuario.id]
+  )
+  await login(USER_A)
+})
+
+test('Sheets aísla empresas incluso con acceso_global y el mismo DNI', async () => {
+  await db.query(
+    'update integraciones_api set acceso_global=true where auth_user_id=$1',
+    [USER_A]
+  )
+  await login(USER_A)
+  await assert.rejects(
+    list('admin_listar_trabajadores', CAMPANIA_TENANT_B),
+    /no tiene permiso/
+  )
+  const user = crypto.randomUUID()
+  await db.query(
+    "insert into integraciones_api(tenant_id,auth_user_id,nombre,activo,puede_gestionar_maestros,puede_consultar_reportes,acceso_global) values($1,$2,'Empresa B',true,true,true,true)",
+    [TENANT_B, user]
+  )
+  await login(user)
+  const otro = await worker(CAMPANIA_TENANT_B, '47480378', 'Deysi de B')
+  assert.notEqual(otro.trabajador.id, shared)
+  const listado = await list('admin_listar_trabajadores', CAMPANIA_TENANT_B)
+  assert.deepEqual(
+    listado.trabajadores.map((w) => w.id),
+    [otro.trabajador.id]
+  )
+  await assert.rejects(list('admin_listar_trabajadores', A), /no tiene permiso/)
+  await db.query(
+    'update integraciones_api set acceso_global=false where auth_user_id=$1',
+    [USER_A]
+  )
   await login(USER_A)
 })
 after(() => db.close())
@@ -356,8 +444,11 @@ test('una identidad autorizada en ambas campañas puede consultar ambas sin dupl
       )
     )
   assert.equal(
-    (await db.query("select count(*)::int n from trabajadores where dni='47480378'"))
-      .rows[0].n,
+    (
+      await db.query(
+        "select count(*)::int n from trabajadores where dni='47480378' and tenant_id='00000000-0000-4000-8000-000000000001'"
+      )
+    ).rows[0].n,
     1
   )
 })
@@ -377,6 +468,380 @@ test('los permisos SQL reales conceden adaptadores a authenticated y rechazan an
   await db.exec('set role anon')
   try {
     await assert.rejects(list('admin_listar_campanias', A), /permission denied/)
+  } finally {
+    await db.exec('reset role')
+  }
+})
+
+test('Sheets conserva autorización propia y también exige el módulo, incluso en RPC de roles y maestros', async () => {
+  await login(USER_A)
+  const tenant = '00000000-0000-4000-8000-000000000001'
+  const cambiarModulo = async (modulo, habilitado) => {
+    await login(USER_COMERCIAL)
+    try {
+      await call('platform_solicitar_cambio', [
+        [crypto.randomUUID(), 'uuid'],
+        [tenant, 'uuid'],
+        [habilitado ? 'HABILITAR_MODULO' : 'DESHABILITAR_MODULO', 'text'],
+        [habilitado ? { modulo, origen: 'EXCEPCION' } : { modulo }, 'jsonb'],
+        ['Cambio comercial de prueba', 'text'],
+        [null, 'timestamptz']
+      ])
+    } finally {
+      await login(USER_A)
+    }
+  }
+  for (const [modulo, names] of [
+    ['WORKFORCE', ['admin_listar_trabajadores', 'admin_listar_roles_campania']],
+    [
+      'CAMPAIGN',
+      ['admin_listar_campanias', 'admin_listar_lotes', 'admin_listar_variedades']
+    ],
+    ['HARVEST', ['admin_obtener_produccion_lotes']]
+  ]) {
+    await cambiarModulo(modulo, false)
+    try {
+      for (const name of names)
+        await assert.rejects(list(name, A), /Módulo no habilitado/)
+    } finally {
+      await cambiarModulo(modulo, true)
+    }
+    for (const name of names) assert.ok(await list(name, A))
+  }
+  assert.deepEqual(
+    (
+      await db.query(
+        "select nullif(current_setting('scc.campania_id',true),'') campania,nullif(current_setting('scc.hoja_campania_id',true),'') hoja"
+      )
+    ).rows[0],
+    { campania: null, hoja: null }
+  )
+})
+
+const SCC = '00000000-0000-4000-8000-000000000001'
+const cutoverId = crypto.randomUUID()
+const corte = (campania = A, tenant = SCC, id = cutoverId, revisados = true) =>
+  call('platform_cutover_admin_activar', [
+    [tenant, 'uuid'],
+    [campania, 'uuid'],
+    [id, 'uuid'],
+    ['Pendientes conciliados; paridad verificada', 'text'],
+    [revisados, 'boolean']
+  ])
+const consultarCorte = (campania = A, tenant = SCC) =>
+  call('platform_cutover_admin_consultar', [
+    [tenant, 'uuid'],
+    [campania, 'uuid']
+  ])
+let corteA, estadoAntesCorte
+test('F7.7 cierra gaps: alta/edición/estado de lote operativo, pertenencia e historial; jornada JABERO semántica', async () => {
+  await login(USER_COMERCIAL)
+  await db.query("update campanias set estado='ACTIVA' where id=$1", [A])
+  const datos = [
+    [SCC, 'uuid'],
+    [A, 'uuid'],
+    [null, 'uuid'],
+    ['F77-OP', 'text'],
+    ['Operativo portal', 'text'],
+    [true, 'boolean'],
+    [[VA], 'uuid[]']
+  ]
+  const lote = await call('campaign_admin_guardar_lote', datos)
+  assert.equal(lote.codigo, 'F77-OP')
+  assert.deepEqual(lote.variedadIds, [VA])
+  datos[2] = [lote.id, 'uuid']
+  datos[4] = ['Editado', 'text']
+  datos[5] = [false, 'boolean']
+  assert.equal((await call('campaign_admin_guardar_lote', datos)).activo, false)
+  datos[1] = [B, 'uuid']
+  await assert.rejects(call('campaign_admin_guardar_lote', datos), /otra campaña/)
+  datos[2] = [null, 'uuid']
+  datos[1] = [A, 'uuid']
+  datos[6] = [[VB], 'uuid[]']
+  await assert.rejects(
+    call('campaign_admin_guardar_lote', datos),
+    /otra empresa\/cultivo/
+  )
+  const workerId = (
+    await db.query(
+      "insert into trabajadores(tenant_id,dni,nombres,apellidos,activo) values($1,'71717777','Jornada','Portal',true) returning id",
+      [SCC]
+    )
+  ).rows[0].id
+  const jornada = (activo, camp = A, tenant = SCC) =>
+    call('workforce_admin_jornada_jabero', [
+      [tenant, 'uuid'],
+      [workerId, 'uuid'],
+      [camp, 'uuid'],
+      [activo, 'boolean']
+    ])
+  let r = await jornada(true)
+  const id = r.find((p) => p.rol === 'JABERO').id
+  assert.equal(
+    r.find((p) => p.rol === 'JABERO').fechaJabero,
+    (
+      await db.query(
+        "select (clock_timestamp() at time zone 'America/Lima')::date::text f"
+      )
+    ).rows[0].f
+  )
+  r = await jornada(false)
+  assert.equal(r.find((p) => p.rol === 'JABERO').activo, false)
+  r = await jornada(true)
+  assert.equal(r.find((p) => p.rol === 'JABERO').id, id)
+  await assert.rejects(jornada(true, CAMPANIA_TENANT_B), /otra empresa/)
+})
+test('F7.7 campaña sin migrar admite escrituras Sheets; cutover requiere revisión, permisos y contexto autorizado', async () => {
+  await login(USER_A)
+  assert.equal((await worker(A, '71710001', 'Antes', 'Corte')).ok, true)
+  await assert.rejects(corte(), /Sesión|Empresa no autorizada|membresía/)
+  await login(USER_COMERCIAL)
+  assert.equal((await consultarCorte()).autoridad, 'TRANSICION_SHEETS')
+  await assert.rejects(corte(A, SCC, cutoverId, false), /revisión/)
+  await assert.rejects(corte(CAMPANIA_TENANT_B), /otra empresa/)
+  estadoAntesCorte = (
+    await db.query(
+      `select jsonb_build_object('trabajadores',(select count(*) from trabajadores),'roles',(select count(*) from trabajador_campania_rol),
+    'lecturas',(select count(*) from lecturas_jaba),'tickets',(select count(*) from asignaciones_ticket),
+    'recibos',(select count(*) from operaciones_pda_procesadas),'comercial',platform_estado_comercial($1)) r`,
+      [SCC]
+    )
+  ).rows[0].r
+  corteA = await corte()
+  assert.equal(corteA.autoridad, 'PORTAL')
+  assert.equal(corteA.corte.operacion_id, cutoverId)
+})
+test('F7.7 Sheets rechaza todos los maestros migrados, conserva lectura e integraciones por campaña', async () => {
+  await login(USER_A)
+  await db.exec('set role authenticated')
+  try {
+    await assert.rejects(worker(A, '71710002'), /migrada al Portal/)
+    await assert.rejects(variety(A, 'Después de corte'), /migrada al Portal/)
+    await assert.rejects(
+      call('admin_guardar_campania_hoja', [
+        [A, 'uuid'],
+        [A, 'uuid'],
+        ['SCC-2026', 'varchar'],
+        ['Mutar', 'varchar'],
+        ['2026-01-01', 'date'],
+        [null, 'date'],
+        ['ACTIVA', 'estado_campania']
+      ]),
+      /migrada al Portal/
+    )
+    await assert.rejects(
+      call('admin_guardar_lote_variedades_hoja', [
+        [A, 'uuid'],
+        [null, 'uuid'],
+        ['INVADIR', 'varchar'],
+        ['No', 'varchar'],
+        [A, 'uuid'],
+        [[VA], 'uuid[]'],
+        [true, 'boolean']
+      ]),
+      /migrada al Portal/
+    )
+    await assert.rejects(
+      call('admin_guardar_rol_campania_hoja', [
+        [A, 'uuid'],
+        [null, 'uuid'],
+        [shared, 'uuid'],
+        [A, 'uuid'],
+        ['SUPERVISORA', 'rol_trabajador'],
+        [true, 'boolean']
+      ]),
+      /migrada al Portal/
+    )
+    assert.ok((await list('admin_listar_trabajadores', A)).trabajadores.length)
+    assert.equal((await list('admin_obtener_produccion_lotes', A)).ok, true)
+  } finally {
+    await db.exec('reset role')
+  }
+  assert.equal(
+    (
+      await db.query(
+        'select count(*)::int n from integracion_campania where campania_id=$1 and escritura_habilitada',
+        [A]
+      )
+    ).rows[0].n,
+    0
+  )
+  await login(USER_B)
+  assert.equal((await worker(B, '71710003', 'Otra', 'Campaña')).ok, true)
+  assert.equal(
+    (
+      await db.query(
+        'select bool_and(escritura_habilitada) v from integracion_campania where campania_id=$1',
+        [B]
+      )
+    ).rows[0].v,
+    true
+  )
+})
+test('F7.7 credencial global antigua, flags reactivados y contexto falso no saltan protección de filas compartidas', async () => {
+  await login(USER_BOTH)
+  await db.query(
+    'update integraciones_api set acceso_global=true where auth_user_id=$1',
+    [USER_BOTH]
+  )
+  await db.query(
+    'update integracion_campania set escritura_habilitada=true where campania_id=$1 and integracion_id=(select id from integraciones_api where auth_user_id=$2)',
+    [A, USER_BOTH]
+  )
+  assert.equal(
+    (
+      await db.query(
+        'select count(*)::int n from integracion_campania where campania_id=$1 and escritura_habilitada',
+        [A]
+      )
+    ).rows[0].n,
+    0
+  )
+  await assert.rejects(worker(A, '71710004'), /migrada al Portal/)
+  await assert.rejects(
+    call('admin_guardar_campania', [
+      [A, 'uuid'],
+      ['MUTAR', 'varchar'],
+      ['Mutar', 'varchar'],
+      ['2026-01-01', 'date'],
+      [null, 'date'],
+      ['ACTIVA', 'estado_campania']
+    ]),
+    /migrada al Portal/
+  )
+  await db.query("select set_config('scc.hoja_campania_id',$1,false)", [B])
+  try {
+    await assert.rejects(
+      call('admin_guardar_trabajador', [
+        [shared, 'uuid'],
+        ['47480378', 'varchar'],
+        ['Cambio indirecto', 'varchar'],
+        ['No', 'varchar'],
+        [true, 'boolean']
+      ]),
+      /migrada al Portal/
+    )
+    await assert.rejects(
+      call('admin_guardar_variedad', [
+        [VA, 'uuid'],
+        ['Cambio indirecto', 'varchar'],
+        [true, 'boolean']
+      ]),
+      /migrada al Portal/
+    )
+  } finally {
+    await db.query("select set_config('scc.hoja_campania_id','',false)")
+  }
+  // Aun si una identidad técnica recibiera por error una membresía de gestión,
+  // llamar los endpoints Portal no vuelve a darle autoridad sobre el corte.
+  const u = (await call('iam_obtener_identidad')).usuario.id
+  await db.query(
+    `with m as (insert into identity_membresias(tenant_id,usuario_id) values($1,$2) returning id)
+    insert into identity_membresia_roles(tenant_id,membresia_id,rol_id) select $1,m.id,r.id from m cross join identity_roles r where r.tenant_id=$1 and r.codigo='ADMIN_EMPRESA'`,
+    [SCC, u]
+  )
+  await assert.rejects(
+    call('campaign_admin_cerrar', [
+      [SCC, 'uuid'],
+      [A, 'uuid']
+    ]),
+    /migrada al Portal/
+  )
+  await assert.rejects(corte(B, SCC, crypto.randomUUID()), /integración técnica/)
+})
+test('F7.7 Portal escribe tras el corte y los UUID de otro Tenant se rechazan; PWA conserva jornada/acceso', async () => {
+  await login(USER_COMERCIAL)
+  const a = await call('campaign_admin_obtener', [
+    [SCC, 'uuid'],
+    [A, 'uuid']
+  ])
+  const r = await call('campaign_admin_editar', [
+    [SCC, 'uuid'],
+    [A, 'uuid'],
+    [a.codigo, 'text'],
+    ['Administración Portal', 'text'],
+    [a.cultivoId, 'uuid'],
+    [a.fechaInicio, 'date'],
+    [a.fechaFin, 'date']
+  ])
+  assert.equal(r.nombre, 'Administración Portal')
+  await assert.rejects(consultarCorte(A, TENANT_B), /Empresa|membresía/)
+  await login(USER_B)
+  await assert.rejects(worker(CAMPANIA_TENANT_B, '71710005'), /otra empresa/)
+  const tecnicoB = (
+    await db.query(
+      'select auth_user_id from integraciones_api where tenant_id=$1 limit 1',
+      [TENANT_B]
+    )
+  ).rows[0].auth_user_id
+  await login(tecnicoB)
+  assert.equal(
+    (await worker(CAMPANIA_TENANT_B, '71710006', 'Sigue', 'En su empresa')).ok,
+    true
+  )
+  await login(USER_COMERCIAL)
+  await call('workforce_admin_asignar_rol', [
+    [SCC, 'uuid'],
+    [shared, 'uuid'],
+    [A, 'uuid'],
+    ['SUPERVISORA', 'rol_trabajador']
+  ])
+  await login('')
+  assert.ok(
+    (
+      await call('validar_operador_campanias', [['47480378', 'varchar']])
+    ).campanias.some((c) => c.id === A)
+  )
+  const op = crypto.randomUUID(),
+    args = [
+      [A, 'uuid'],
+      ['47480378', 'varchar'],
+      ['71717777', 'varchar'],
+      [op, 'uuid']
+    ]
+  const pwa = await call('registrar_jabero_campania', args)
+  assert.equal(pwa.ok, true)
+  assert.deepEqual(await call('registrar_jabero_campania', args), pwa)
+})
+test('F7.7 histórico/recibos/auditoría conservados; cutover idempotente, inmutable y sin activaciones por migración', async () => {
+  await login(USER_COMERCIAL)
+  assert.deepEqual(await corte(), corteA)
+  await assert.rejects(corte(A, SCC, crypto.randomUUID()), /Cutover existente/)
+  const ahora = (
+    await db.query(
+      `select jsonb_build_object('trabajadores',(select count(*) from trabajadores),'roles',(select count(*) from trabajador_campania_rol),
+    'lecturas',(select count(*) from lecturas_jaba),'tickets',(select count(*) from asignaciones_ticket),
+    'recibos',(select count(*) from operaciones_pda_procesadas),'comercial',platform_estado_comercial($1)) r`,
+      [SCC]
+    )
+  ).rows[0].r
+  assert.equal(ahora.lecturas, estadoAntesCorte.lecturas)
+  assert.equal(ahora.tickets, estadoAntesCorte.tickets)
+  assert.equal(ahora.recibos, estadoAntesCorte.recibos + 1)
+  assert.deepEqual(ahora.comercial, estadoAntesCorte.comercial)
+  await assert.rejects(
+    db.query('delete from platform_cutovers_administrativos'),
+    /inmutable/
+  )
+  await assert.rejects(
+    db.query("update platform_cutovers_administrativos set motivo='oculto'"),
+    /inmutable/
+  )
+  await assert.rejects(
+    db.query('truncate platform_cutovers_administrativos'),
+    /inmutable/
+  )
+  await db.exec(
+    read('../supabase/migrations/202610141600_portal_cutover_administrativo.sql')
+  )
+  assert.deepEqual(await consultarCorte(), corteA)
+  assert.equal((await consultarCorte(B)).autoridad, 'TRANSICION_SHEETS')
+  await db.exec('set role authenticated')
+  try {
+    await assert.rejects(
+      db.query('select * from platform_cutovers_administrativos'),
+      /permission denied/
+    )
   } finally {
     await db.exec('reset role')
   }

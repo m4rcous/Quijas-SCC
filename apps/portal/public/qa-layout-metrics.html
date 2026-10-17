@@ -1,0 +1,70 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>QA layout metrics</title>
+<style>
+  html,
+  body,
+  iframe {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    border: 0;
+  }
+</style>
+<iframe id="page"></iframe>
+<script>
+  const route = new URLSearchParams(location.search).get('ruta') || '/campanias'
+  const frame = document.querySelector('#page')
+  frame.src = '/tests/visual.html?single=1&ruta=' + encodeURIComponent(route)
+  frame.addEventListener('load', () => {
+    let attempts = 0
+    const timer = setInterval(() => {
+      const doc = frame.contentDocument
+      const win = frame.contentWindow
+      const target = doc?.querySelector('.management-page-header')
+      if (!target && attempts++ < 40) return
+      clearInterval(timer)
+      const pick = (element) => {
+        if (!element) return null
+        const rect = element.getBoundingClientRect()
+        return {
+          tag: element.tagName,
+          cls: typeof element.className === 'string' ? element.className : '',
+          x: rect.x,
+          right: rect.right,
+          width: rect.width,
+          clientWidth: element.clientWidth,
+          scrollWidth: element.scrollWidth,
+        }
+      }
+      const offenders = [...doc.querySelectorAll('*')]
+        .map(pick)
+        .filter(
+          (item) =>
+            item &&
+            (item.right > win.innerWidth + 0.5 ||
+              item.x < -0.5 ||
+              item.scrollWidth > item.clientWidth + 1),
+        )
+        .slice(0, 80)
+      const result = {
+        route,
+        viewport: [win.innerWidth, win.innerHeight],
+        document: {
+          clientWidth: doc.documentElement.clientWidth,
+          scrollWidth: doc.documentElement.scrollWidth,
+          bodyClientWidth: doc.body.clientWidth,
+          bodyScrollWidth: doc.body.scrollWidth,
+        },
+        workspace: pick(doc.querySelector('.workspace')),
+        content: pick(doc.querySelector('.content')),
+        header: pick(doc.querySelector('.management-page-header')),
+        surface: pick(doc.querySelector('.management-surface')),
+        offenders,
+      }
+      document.body.innerHTML = '<pre id="result"></pre>'
+      document.querySelector('#result').textContent = JSON.stringify(result, null, 2)
+      document.title = 'QA_METRICS_READY'
+    }, 100)
+  })
+</script>

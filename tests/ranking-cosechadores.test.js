@@ -7,7 +7,7 @@ import {
   obtenerRankingCosechadores,
   reemplazarRankingCosechadores,
   resumirRankingCosechadores
-} from '../src/modules/rankingCosechadores.js'
+} from '../src/contexts/harvest/application/reports/rankingCosechadores.js'
 
 const respuestaBase = {
   ok: true,
@@ -124,9 +124,14 @@ test('normaliza tipos de la respuesta de la RPC', () => {
   })
 })
 
-test('propaga el error de la RPC', async () => {
-  const rpc = async () => ({ data: null, error: { message: 'RPC no disponible' } })
-  await assert.rejects(obtenerRankingCosechadores('12345678', rpc), /RPC no disponible/)
+test('propaga el error de la consulta', async () => {
+  const consultar = async () => {
+    throw new Error('RPC no disponible')
+  }
+  await assert.rejects(
+    obtenerRankingCosechadores('12345678', consultar),
+    /RPC no disponible/
+  )
 })
 
 test('actualizar reemplaza el ranking y no duplica filas', () => {

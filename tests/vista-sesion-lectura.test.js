@@ -1,3 +1,4 @@
+import { casosDeUsoParaVista } from './helpers/casosDeUso.js'
 import 'fake-indexeddb/auto'
 import assert from 'node:assert/strict'
 import test from 'node:test'
@@ -15,6 +16,7 @@ import {
 } from '../src/offline/db.js'
 import {
   mostrarContadorCosechador,
+  actualizarTotalesLecturaEnVista,
   mostrarEstadoLecturaTicket,
   mostrarSesionLecturaEnVista
 } from '../src/modules/vistaSesionLectura.js'
@@ -26,6 +28,21 @@ const consultas = {
   obtenerTicket,
   obtenerTrabajador
 }
+
+test('reconciliar conteos elimina producción rechazada sin tocar input, foco ni mensaje de rechazo', async () => {
+  const elementos = vista()
+  elementos.ticketLectura.value = 'ESCANEO-EN-CURSO'
+  elementos.resultadoLectura.textContent = 'Ticket rechazado'
+  await actualizarTotalesLecturaEnVista(sesion('RECHAZADA'), elementos, {
+    contarLecturasSesion: async () => 0,
+    obtenerUltimaLecturaSesion: async () => undefined
+  })
+  assert.equal(elementos.totalSesion.textContent, 0)
+  assert.equal(elementos.totalCosechador.textContent, '0')
+  assert.equal(elementos.ticketLectura.value, 'ESCANEO-EN-CURSO')
+  assert.equal(elementos.ticketLectura.enfocado, false)
+  assert.equal(elementos.resultadoLectura.textContent, 'Ticket rechazado')
+})
 
 function elemento() {
   const clases = new Set()
@@ -145,6 +162,7 @@ function escaneoSimulado({ onLine = false, errorGuardar = null } = {}) {
   const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
   const inicio = main.indexOf('configurarEnvioScanner(formLecturaTicket,')
   const fin = main.indexOf('btnFinalizarLectura.addEventListener', inicio)
+  contexto.casosDeUso = casosDeUsoParaVista(contexto)
   runInNewContext(main.slice(inicio, fin), contexto)
   return {
     elementos,

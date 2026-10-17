@@ -9,7 +9,7 @@ import {
   normalizarResumenCampania,
   obtenerResumenCampania,
   reemplazarResumenCampania
-} from '../src/modules/resumenCampania.js'
+} from '../src/contexts/harvest/application/reports/resumenCampania.js'
 
 const respuestaBase = {
   ok: true,
@@ -121,19 +121,16 @@ test('formatea números grandes con Intl.NumberFormat', () => {
 
 test('envía la timezone del dispositivo a la RPC', async () => {
   let llamada
-  const rpc = async (nombre, parametros) => {
-    llamada = { nombre, parametros }
-    return { data: respuestaBase, error: null }
+  const consultar = async (parametros) => {
+    llamada = parametros
+    return respuestaBase
   }
 
-  await obtenerResumenCampania('12345678', rpc, () => 'America/Lima')
+  await obtenerResumenCampania('12345678', consultar, () => 'America/Lima')
 
   assert.deepEqual(llamada, {
-    nombre: 'obtener_resumen_campania',
-    parametros: {
-      p_dni_operador: '12345678',
-      p_zona_horaria: 'America/Lima'
-    }
+    dniOperador: '12345678',
+    zonaHoraria: 'America/Lima'
   })
 })
 
@@ -156,11 +153,13 @@ test('actualizar reemplaza el resumen y no acumula métricas', () => {
   assert.notEqual(reemplazado.resumen, siguiente.resumen)
 })
 
-test('propaga el error de la RPC', async () => {
-  const rpc = async () => ({ data: null, error: { message: 'RPC no disponible' } })
+test('propaga el error de la consulta', async () => {
+  const consultar = async () => {
+    throw new Error('RPC no disponible')
+  }
 
   await assert.rejects(
-    obtenerResumenCampania('12345678', rpc, () => 'America/Lima'),
+    obtenerResumenCampania('12345678', consultar, () => 'America/Lima'),
     /RPC no disponible/
   )
 })
@@ -175,7 +174,10 @@ test('la migración conserva las reglas exactas del resumen', async () => {
   assert.match(sql, /count\(distinct at\.cosechador_rol_id\)::bigint/i)
   assert.match(sql, /count\(distinct sl\.lote_id\)::bigint/i)
   assert.match(sql, /count\(distinct lj\.sesion_id\)::bigint/i)
-  assert.match(sql, /count\(\s*distinct \(lj\.fecha_hora at time zone v_zona_horaria\)::date\s*\)::bigint/i)
+  assert.match(
+    sql,
+    /count\(\s*distinct \(lj\.fecha_hora at time zone v_zona_horaria\)::date\s*\)::bigint/i
+  )
   assert.match(sql, /max\(lj\.fecha_hora\)/i)
   assert.match(sql, /where at\.campania_id = v_campania_id/i)
   assert.match(sql, /and l\.campania_id = v_campania_id/i)
@@ -189,7 +191,7 @@ test('la migración conserva las reglas exactas del resumen', async () => {
 
 test('el resumen no se construye sumando reportes secundarios ni IndexedDB', async () => {
   const modulo = await readFile(
-    new URL('../src/modules/resumenCampania.js', import.meta.url),
+    new URL('../src/contexts/harvest/application/reports/resumenCampania.js', import.meta.url),
     'utf8'
   )
 

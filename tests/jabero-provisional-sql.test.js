@@ -6,7 +6,7 @@ import vm from 'node:vm'
 import { PGlite } from '@electric-sql/pglite'
 import * as local from '../src/offline/db.js'
 import { ejecutarCola } from '../src/offline/cola.js'
-import { parametrosCampania } from '../src/modules/campaniaOperador.js'
+import { crearSupabaseBackend } from '../src/infrastructure/supabase/backendAdapter.js'
 
 const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf8')
 const db = new PGlite()
@@ -281,9 +281,8 @@ test('reconexión procesa una sola REGISTRAR_JABERO real desde IndexedDB hasta P
   const contexto = vm.createContext({
     ...local,
     ejecutarCola,
-    parametrosCampania,
     navigator: { onLine: false },
-    supabase: {
+    backend: crearSupabaseBackend({
       rpc: async (nombre, args) => {
         llamadas.push({ nombre, args })
         return {
@@ -294,9 +293,9 @@ test('reconexión procesa una sola REGISTRAR_JABERO real desde IndexedDB hasta P
           )
         }
       }
-    }
+    })
   })
-  const registrar = read('../src/modules/registroJaberos.js')
+  const registrar = read('../src/contexts/workforce/application/registroJaberos.js')
   vm.runInContext(
     registrar.slice(registrar.indexOf('export async')).replace('export ', ''),
     contexto

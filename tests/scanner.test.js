@@ -1,5 +1,6 @@
+import { casosDeUsoParaVista } from './helpers/casosDeUso.js'
 import assert from 'node:assert/strict'
-import { seleccionarVariedadLote } from '../src/modules/variedadesLote.js'
+import { seleccionarVariedadLote } from '../src/contexts/campaign-management/domain/variedadesLote.js'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { runInNewContext } from 'node:vm'
@@ -441,6 +442,7 @@ function formularioSimulado(nombreForm, nombreInput, marcadorFin, contextoExtra)
     actualizarEstadoConexion: async () => {},
     ...contextoExtra
   }
+  contexto.casosDeUso = casosDeUsoParaVista(contexto)
   runInNewContext(main.slice(inicio, fin), contexto)
   return { form, input, contexto }
 }

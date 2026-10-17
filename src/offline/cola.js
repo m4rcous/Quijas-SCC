@@ -4,6 +4,9 @@ export function obtenerOperacionesDependientes(operacion, operaciones) {
   if (!operacion) return []
 
   return operaciones.filter((posterior) => {
+    if ((posterior.payload.campaniaId ?? '') !== (operacion.payload.campaniaId ?? ''))
+      return false
+    if (posterior.dependencias?.includes(operacion.id)) return true
     if (posterior.id === operacion.id || posterior.creado_en <= operacion.creado_en) {
       return false
     }
@@ -59,17 +62,21 @@ export async function ejecutarCola(operaciones, procesar, alSincronizar, alFalla
     const campania = operacion.payload.campaniaId ?? ''
     if (bloqueadas.has(campania)) continue
     if (operacion.estado === 'SINCRONIZADA') continue
+    // Un rechazo Harvest ya reconciliado conserva su auditoría, pero no es
+    // trabajo enviable ni impide sincronizar intenciones independientes.
+    if (operacion.estado === 'ERROR' && operacion.rechazoHarvest === true) continue
     if (operacion.estado !== 'PENDIENTE') {
       bloqueadas.add(campania)
       continue
     }
+    let resultado
     try {
-      await procesar(operacion)
+      resultado = await procesar(operacion)
     } catch (error) {
       await alFallar(operacion, error, esErrorTemporal(error))
       bloqueadas.add(campania)
       continue
     }
-    await alSincronizar(operacion)
+    await alSincronizar(operacion, resultado)
   }
 }

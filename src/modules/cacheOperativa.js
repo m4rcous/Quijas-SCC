@@ -1,20 +1,8 @@
-import { supabase } from '../supabase'
-
-import { guardarCache } from '../offline/db'
-import { parametrosCampania } from './campaniaOperador'
+import { backend } from '../backend/backend.js'
+import { guardarCache } from '../offline/db.js'
 
 export async function actualizarCacheOperativa(dniOperador, campaniaId) {
-  const { data, error } = await supabase.rpc(
-    ...parametrosCampania(campaniaId, 'obtener_cache_operativa', {
-      p_dni_operador: dniOperador
-    })
-  )
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
+  const data = await backend.obtenerCacheOperativa(dniOperador, campaniaId)
   await guardarCache(data)
-
   return data
 }

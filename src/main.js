@@ -1,31 +1,18 @@
 import './style.css'
-import { supabase } from './supabase'
-import { validarOperador } from './modules/auth'
-import { autorizacionOperadorVigente } from './modules/fechaOperativa'
+import { backend } from './backend/backend.js'
+import { casosDeUso } from './application/casosDeUso.js'
+import { autorizacionOperadorVigente } from './contexts/identity-access/index.js'
 import { buscarCosechador } from './modules/asignacionTickets'
-import { nombreCosechadorVisible } from './modules/cosechadorLocal'
+import { nombreCosechadorVisible } from './contexts/workforce/index.js'
 import { actualizarCacheOperativa } from './modules/cacheOperativa'
-import {
-  resolverCampaniaOperador,
-  parametrosCampania
-} from './modules/campaniaOperador'
-import { seleccionarCampaniaLocal, obtenerCacheCampania } from './offline/db'
-import { esErrorTemporal } from './offline/errores'
-import {
-  obtenerVariedadesLote,
-  seleccionarVariedadLote
-} from './modules/variedadesLote'
+import { resolverCampaniaOperador } from './contexts/campaign-management/index.js'
+import { seleccionarCampaniaLocal } from './offline/db'
+import { obtenerVariedadesLote } from './contexts/campaign-management/index.js'
 import {
   contarLecturasCosechador,
   contarLecturasSesion,
   contarErrores,
   contarPendientes,
-  existeTicketPendiente,
-  guardarAsignacionOffline,
-  registrarJaberoOffline,
-  iniciarSesionOffline,
-  registrarLecturaOffline,
-  finalizarSesionOffline,
   obtenerLotes,
   obtenerTicket,
   obtenerTickets,
@@ -34,7 +21,6 @@ import {
   obtenerLecturasSesion,
   obtenerSesionesActivas,
   obtenerSesionesOperador,
-  obtenerSesionActivaJabero,
   obtenerUltimaLecturaSesion,
   obtenerColaCompleta,
   reintentarOperacion,
@@ -50,6 +36,7 @@ import {
 import { configurarConfirmacion } from './modules/confirmacion'
 import {
   mostrarContadorCosechador,
+  actualizarTotalesLecturaEnVista,
   mostrarEstadoLecturaTicket,
   mostrarSesionLecturaEnVista
 } from './modules/vistaSesionLectura'
@@ -58,11 +45,11 @@ import {
   filtrarAsignacionesHoy,
   formatearHoraAsignacion,
   obtenerBadgeEstadoAsignacion
-} from './modules/asignadosHoy'
+} from './contexts/harvest/index.js'
 import {
   filtrarJaberosCampania,
   obtenerBadgeEstadoJabero
-} from './modules/jaberosCampania'
+} from './contexts/workforce/index.js'
 import {
   ORDEN_COSECHADORES_JABAS,
   agruparLecturasPorCosechador,
@@ -70,7 +57,7 @@ import {
   formatearHoraUltimaLectura,
   ordenarCosechadoresJabas,
   resumirCosechadoresJabas
-} from './modules/cosechadoresJabas'
+} from './contexts/harvest/index.js'
 import {
   FILTROS_SESIONES_LECTURA,
   enriquecerSesionLectura,
@@ -78,7 +65,7 @@ import {
   formatearFechaSesion,
   formatearPeriodoSesion,
   obtenerBadgeEstadoSesion
-} from './modules/sesionesLectura'
+} from './contexts/harvest/index.js'
 import {
   buscarRankingCosechadores,
   esErrorConexionRanking,
@@ -86,14 +73,14 @@ import {
   obtenerRankingCosechadores,
   reemplazarRankingCosechadores,
   resumirRankingCosechadores
-} from './modules/rankingCosechadores'
+} from './contexts/harvest/index.js'
 import {
   esErrorConexionProduccion,
   formatearFechaCalendario,
   obtenerProduccionDiaria,
   reemplazarProduccionDiaria,
   resumirProduccionDiaria
-} from './modules/produccionDiaria'
+} from './contexts/harvest/index.js'
 import {
   ORDEN_PRODUCCION_LOTES,
   buscarProduccionLotes,
@@ -103,7 +90,7 @@ import {
   ordenarProduccionLotes,
   reemplazarProduccionLotes,
   resumirProduccionLotes
-} from './modules/produccionLotes'
+} from './contexts/harvest/index.js'
 import {
   esErrorConexionResumenCampania,
   formatearFechaInicioCampania,
@@ -111,7 +98,7 @@ import {
   formatearUltimaActividad,
   obtenerResumenCampania,
   reemplazarResumenCampania
-} from './modules/resumenCampania'
+} from './contexts/harvest/index.js'
 
 // VISTAS
 
@@ -162,23 +149,12 @@ async function prepararIngreso(idRestaurado) {
 
 async function ingresarCampania(campania) {
   const operadorIngreso = operador
-  campania = resolverCampaniaOperador(operadorIngreso, campania.id)
-  await seleccionarCampaniaLocal(campania.id)
-  const cacheLocal = await obtenerCacheCampania(campania.id)
-  if (operador.offline) {
-    if (!cacheLocal)
-      throw new Error(
-        'Esta campaña no está disponible sin conexión. Conéctese para cargarla por primera vez.'
-      )
-  } else {
-    try {
-      await actualizarCacheOperativa(operador.dni, campania.id)
-    } catch (error) {
-      if (!esErrorTemporal(error) || !cacheLocal) throw error
-    }
-  }
+  const resultado = await casosDeUso.ingresarCampania({
+    operador: operadorIngreso,
+    campania
+  })
   if (operador !== operadorIngreso) return
-  operador = { ...operadorIngreso, campania }
+  operador = resultado.operador
   sesionLectura = null
   cosechador = null
   resumenCampaniaActual = null
@@ -188,8 +164,12 @@ async function ingresarCampania(campania) {
   sessionStorage.setItem('operador_dni', operador.dni)
   sessionStorage.setItem('campania_id', campania.id)
   mostrarMenu()
-  if (navigator.onLine)
-    sincronizarPendientes().then(actualizarEstadoConexion).catch(console.error)
+  resultado
+    .sincronizar()
+    .then((intento) => {
+      if (intento) return actualizarEstadoConexion()
+    })
+    .catch(console.error)
 }
 
 document.querySelector('#btn-cancelar-cultivo').addEventListener('click', cerrarSesion)
@@ -444,14 +424,16 @@ const opcionesCultivo = document.querySelector('#opciones-cultivo')
 const cultivoMensaje = document.querySelector('#cultivo-mensaje')
 const menuCampania = document.querySelector('#menu-campania')
 
-async function rpcCampania(nombre, parametros) {
+async function consultarCampania(consultar, parametros) {
   if (!operador?.campania?.id)
     throw new Error('Ingrese para seleccionar su campaña de trabajo.')
   const id = operador.campania.id
-  const respuesta = await supabase.rpc(...parametrosCampania(id, nombre, parametros))
-  if (operador?.campania?.id !== id)
-    throw new Error('La campaña de trabajo cambió. Actualice la consulta.')
-  return respuesta
+  try {
+    return await consultar({ ...parametros, campaniaId: id })
+  } finally {
+    if (operador?.campania?.id !== id)
+      throw new Error('La campaña de trabajo cambió. Actualice la consulta.')
+  }
 }
 let cosechador = null
 let sesionLectura = null
@@ -1116,8 +1098,8 @@ async function cargarResumenCampania() {
   }
 
   try {
-    const respuesta = await obtenerResumenCampania(operador.dni, (nombre, parametros) =>
-      rpcCampania(nombre, parametros)
+    const respuesta = await obtenerResumenCampania(operador.dni, (parametros) =>
+      consultarCampania(backend.obtenerResumenCampania, parametros)
     )
     resumenCampaniaActual = reemplazarResumenCampania(resumenCampaniaActual, respuesta)
     ocultarFeedbackResumenCampania()
@@ -1201,7 +1183,7 @@ async function cargarRankingCosechadores() {
   try {
     const respuesta = await obtenerRankingCosechadores(
       operador.dni,
-      (nombre, parametros) => rpcCampania(nombre, parametros),
+      (parametros) => consultarCampania(backend.obtenerRankingCosechadores, parametros),
       rankingPeriodo.value
     )
     rankingCosechadoresActual = reemplazarRankingCosechadores(
@@ -1326,9 +1308,8 @@ async function cargarProduccionDiaria() {
   }
 
   try {
-    const respuesta = await obtenerProduccionDiaria(
-      operador.dni,
-      (nombre, parametros) => rpcCampania(nombre, parametros)
+    const respuesta = await obtenerProduccionDiaria(operador.dni, (parametros) =>
+      consultarCampania(backend.obtenerProduccionDiaria, parametros)
     )
     produccionDiariaActual = reemplazarProduccionDiaria(
       produccionDiariaActual,
@@ -1444,8 +1425,8 @@ async function cargarProduccionLotes() {
   }
 
   try {
-    const respuesta = await obtenerProduccionLotes(operador.dni, (nombre, parametros) =>
-      rpcCampania(nombre, parametros)
+    const respuesta = await obtenerProduccionLotes(operador.dni, (parametros) =>
+      consultarCampania(backend.obtenerProduccionLotes, parametros)
     )
     produccionLotesActual = reemplazarProduccionLotes(
       produccionLotesActual,
@@ -1726,7 +1707,7 @@ configurarEnvioScanner(formLogin, dniOperadorInput, async (dni) => {
     return
   }
   try {
-    operador = await validarOperador(dni)
+    operador = await casosDeUso.validarOperador(dni)
     desactivarTecladoManual(dniOperadorInput)
     await prepararIngreso()
   } catch (error) {
@@ -1953,23 +1934,9 @@ configurarEnvioScanner(formTicket, codigoTicketInput, async (codigoTicket, liber
     return
   }
   codigoTicketInput.disabled = true
+  let resultado
   try {
-    const ticketExistente = await obtenerTicket(codigoTicket)
-    const ticketPendiente = await existeTicketPendiente(codigoTicket)
-
-    if (ticketExistente || ticketPendiente) {
-      mostrarResultado('El ticket ya fue asignado.', 'error')
-      codigoTicketInput.disabled = false
-      codigoTicketInput.select()
-      return
-    }
-
-    await guardarAsignacionOffline({
-      codigoTicket,
-      cosechadorDni: cosechador.dni,
-      cosechador: cosechador.nombre,
-      dniOperador: operador.dni
-    })
+    resultado = await casosDeUso.asignarTicket({ operador, cosechador, codigoTicket })
   } catch (error) {
     mostrarResultado(error.message, 'error')
     codigoTicketInput.disabled = false
@@ -1977,18 +1944,18 @@ configurarEnvioScanner(formTicket, codigoTicketInput, async (codigoTicket, liber
     return
   }
 
-  mostrarResultado(`Ticket ${codigoTicket} asignado`, 'exito')
+  mostrarResultado(
+    resultado.estado === 'PENDIENTE'
+      ? `Lote del ticket ${codigoTicket} reservado, pendiente de confirmación`
+      : `Ticket ${codigoTicket} asignado`,
+    'exito'
+  )
   desactivarTecladoManual(codigoTicketInput)
   setTimeout(prepararSiguienteCosechador, 1200)
   liberar()
   await actualizarEstadoConexion()
 
-  if (navigator.onLine) {
-    try {
-      await sincronizarPendientes()
-    } catch (error) {
-      console.error('No se pudo sincronizar el ticket guardado:', error)
-    }
+  if (await resultado.sincronizar()) {
     await actualizarEstadoConexion()
   }
 })
@@ -2002,10 +1969,10 @@ configurarEnvioScanner(formJabero, dniJaberoInput, async (dni, liberar) => {
     dniJaberoInput.select()
     return
   }
+  let resultado
   try {
-    const trabajador = await obtenerTrabajador(dni)
-
-    await registrarJaberoOffline(operador.dni, dni)
+    resultado = await casosDeUso.registrarJabero({ operador, dni })
+    const { trabajador } = resultado
 
     mostrarResultadoJabero(
       `${nombreCosechadorVisible(trabajador?.nombre, dni)} registrado como jabero`,
@@ -2021,13 +1988,7 @@ configurarEnvioScanner(formJabero, dniJaberoInput, async (dni, liberar) => {
   }
 
   liberar()
-  if (navigator.onLine) {
-    try {
-      await sincronizarPendientes()
-    } catch (error) {
-      console.error('No se pudo sincronizar el registro de jabero:', error)
-    }
-  }
+  await resultado.sincronizar()
   await actualizarEstadoConexion()
 })
 
@@ -2136,6 +2097,18 @@ async function actualizarEstadoConexion() {
   try {
     pendientes = await contarPendientes()
     errores = await contarErrores()
+    if (sesionLectura) {
+      await actualizarTotalesLecturaEnVista(
+        sesionLectura,
+        { totalSesion, etiquetaCosechador, totalCosechador },
+        {
+          contarLecturasSesion,
+          obtenerUltimaLecturaSesion,
+          contarLecturasCosechador,
+          obtenerTrabajador
+        }
+      )
+    }
   } catch (error) {
     console.error('No se pudo consultar la cola de sincronización:', error)
   }
@@ -2173,7 +2146,7 @@ async function restaurarSesion() {
     return
   }
   try {
-    operador = await validarOperador(dni)
+    operador = await casosDeUso.validarOperador(dni)
     await prepararIngreso(sessionStorage.getItem('campania_id'))
   } catch {
     sessionStorage.removeItem('operador_dni')
@@ -2260,49 +2233,15 @@ configurarEnvioScanner(formIniciarLectura, dniJaberoLectura, async (dni) => {
     dniJaberoLectura.select()
     return
   }
+  let resultado
   try {
-    const trabajador = await obtenerTrabajador(dni)
-    if (!trabajador) {
-      throw new Error('El trabajador no está disponible localmente.')
-    }
-    if (!trabajador.roles?.includes('JABERO')) {
-      throw new Error('El trabajador no está registrado como jabero.')
-    }
-    if (trabajador.estado_sync_jabero === 'ERROR') {
-      throw new Error(
-        'El registro de este jabero fue rechazado. Revise sincronización.'
-      )
-    }
-    const existente = await obtenerSesionActivaJabero(dni)
-    if (existente) {
-      throw new Error('El jabero ya tiene una sesión activa. Continúe esa sesión.')
-    }
-
-    const lotes = await obtenerLotes()
-    const lote = lotes.find((item) => item.lote_id === loteId)
-    if (!lote) {
-      throw new Error('El lote seleccionado no está disponible.')
-    }
-    const variedad = seleccionarVariedadLote(lote, variedadLectura.value)
-
-    const sesionId = crypto.randomUUID()
-    const sesion = {
-      sesion_id: sesionId,
-      jabero: trabajador.nombre,
-      lote_id: lote.lote_id,
-      lote_codigo: lote.codigo,
-      campania_id: operador.campania.id,
-      variedad_id: variedad.id,
-      variedad: variedad.nombre,
-      dni_jabero: dni,
-      dni_operador: operador.dni,
-      estado: 'ACTIVA',
-      fecha_inicio: new Date().toISOString()
-    }
-
-    await iniciarSesionOffline({ id: sesionId, ...sesion }, operador.dni)
-
-    sesionLectura = sesion
+    resultado = await casosDeUso.iniciarSesionLectura({
+      operador,
+      dni,
+      loteId,
+      variedadId: variedadLectura.value
+    })
+    sesionLectura = resultado.sesion
     desactivarTecladoManual(dniJaberoLectura)
     await mostrarSesionLectura()
   } catch (error) {
@@ -2311,13 +2250,7 @@ configurarEnvioScanner(formIniciarLectura, dniJaberoLectura, async (dni) => {
     return
   }
 
-  if (navigator.onLine) {
-    try {
-      await sincronizarPendientes()
-    } catch (error) {
-      console.error('No se pudo sincronizar el inicio de lectura:', error)
-    }
-  }
+  await resultado.sincronizar()
   await actualizarEstadoConexion()
 })
 
@@ -2329,52 +2262,14 @@ configurarEnvioScanner(formLecturaTicket, ticketLectura, async (codigo, liberar)
     return
   }
   ticketLectura.disabled = true
+  let resultado
   try {
-    const jabero = await obtenerTrabajador(sesionLectura.dni_jabero)
-    if (jabero?.estado_sync_jabero === 'ERROR') {
-      throw new Error(
-        'El registro de este jabero fue rechazado. Revise sincronización.'
-      )
-    }
-    const operacionesSesion = await obtenerColaCompleta()
-    if (
-      operacionesSesion.some(
-        (item) =>
-          item.tipo === 'INICIAR_SESION' &&
-          item.payload.sesionId === sesionLectura.sesion_id &&
-          item.estado === 'ERROR'
-      )
-    ) {
-      throw new Error('El inicio de esta sesión fue rechazado. Revise sincronización.')
-    }
-    const ticket = await obtenerTicket(codigo)
-    if (!ticket) {
-      throw new Error('El ticket no está asignado a ningún cosechador.')
-    }
-    if (ticket.estado_sync === 'ERROR') {
-      throw new Error('Este ticket presenta un error de sincronización.')
-    }
-
-    const lecturaId = crypto.randomUUID()
-    const fechaHora = new Date().toISOString()
-    await registrarLecturaOffline(
-      {
-        id: lecturaId,
-        sesion_id: sesionLectura.sesion_id,
-        codigo_ticket: codigo,
-        cosechador_dni: ticket.cosechador_dni,
-        cosechador: ticket.cosechador,
-        fecha_hora: fechaHora,
-        estado_sync: 'PENDIENTE'
-      },
-      operador.dni
-    )
-
-    const total = await contarLecturasSesion(sesionLectura.sesion_id)
-    const totalPersona = await contarLecturasCosechador(
-      sesionLectura.sesion_id,
-      ticket.cosechador_dni
-    )
+    resultado = await casosDeUso.registrarLecturaJaba({
+      operador,
+      sesionLectura,
+      codigo
+    })
+    const { ticket, total, totalPersona } = resultado
     const nombreTicket = nombreCosechadorVisible(
       ticket.cosechador,
       ticket.cosechador_dni
@@ -2400,13 +2295,7 @@ configurarEnvioScanner(formLecturaTicket, ticketLectura, async (codigo, liberar)
   }
 
   liberar()
-  if (navigator.onLine) {
-    try {
-      await sincronizarPendientes()
-    } catch (error) {
-      console.error('No se pudo sincronizar la lectura de jaba:', error)
-    }
-  }
+  await resultado.sincronizar()
   await actualizarEstadoConexion()
 })
 
@@ -2444,19 +2333,12 @@ btnVolverMenuLectura.addEventListener('click', async () => {
 })
 
 async function finalizarSesionLectura() {
-  const sesionId = sesionLectura.sesion_id
-  await finalizarSesionOffline(sesionId, operador.dni)
+  const resultado = await casosDeUso.cerrarSesionLectura({ operador, sesionLectura })
 
   sesionLectura = null
   mostrarMenu()
 
-  if (navigator.onLine) {
-    try {
-      await sincronizarPendientes()
-    } catch (error) {
-      console.error('No se pudo sincronizar el cierre de lectura:', error)
-    }
-  }
+  await resultado.sincronizar()
   await actualizarEstadoConexion()
 }
 

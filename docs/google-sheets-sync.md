@@ -1,5 +1,10 @@
 # Sincronización SCC con Google Sheets
 
+**Estado actual F7.7:** Portal Web es la interfaz administrativa actual.
+No desarrollar nuevas funcionalidades en Apps Script. Esta guía se conserva
+para compatibilidad e histórico; las campañas con cutover administrativo rechazan
+nuevas escrituras Sheets en backend. Consulte la [matriz y procedimiento de retirada](portal-cutover-administrativo-f7.7.md) antes de utilizar los pasos históricos siguientes.
+
 Desde `202610110500_sheets_por_campania.sql`, cada archivo utiliza una campaña fija y RPC `*_hoja` con permisos por integración y campaña. La configuración vigente y el acceso por correo están en [Sheets por campaña](sheets-por-campania.md). Los contratos globales descritos abajo corresponden a la integración anterior y requieren acceso global explícito; los archivos de campaña utilizan los adaptadores nuevos.
 
 PostgreSQL en Supabase es la fuente oficial. Google Sheets funciona como interfaz administrativa para maestros y como salida manual de reportes.

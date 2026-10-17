@@ -1,0 +1,24 @@
+import { ModuloNoHabilitado } from '../../../../../src/contexts/platform/index.js'
+export function crearReportesAdapter(consultar) {
+  const ejecutar = async (...args) => {
+    try {
+      return await consultar(...args)
+    } catch (e) {
+      if (e.message === 'Módulo no habilitado: HARVEST')
+        throw new ModuloNoHabilitado('HARVEST')
+      throw e
+    }
+  }
+  return Object.freeze({
+    campanias: (t) => ejecutar('harvest_reportes_campanias', { p_tenant_id: t }),
+    validar: (t, c) =>
+      ejecutar('harvest_reportes_validar', { p_tenant_id: t, p_campania_id: c }),
+    consultar: (t, f) =>
+      ejecutar('harvest_reportes_obtener', {
+        p_tenant_id: t,
+        p_campania_id: f.campaniaId,
+        p_tipo: f.tipo,
+        p_periodo: f.periodo
+      })
+  })
+}

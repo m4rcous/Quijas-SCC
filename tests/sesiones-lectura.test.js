@@ -19,7 +19,7 @@ import {
   formatearFechaSesion,
   formatearPeriodoSesion,
   ordenarSesionesLectura
-} from '../src/modules/sesionesLectura.js'
+} from '../src/contexts/harvest/application/queries/sesionesLectura.js'
 
 function crearSesion(sufijo, cambios = {}) {
   const id = `sesion-${sufijo}`
@@ -206,7 +206,7 @@ test('una sesión guardada sigue disponible desde una nueva conexión a IndexedD
   const sesion = crearSesion('persistida', { dni_operador: '11000003' })
   await guardarSesionLocal(sesion)
 
-  const dbReabierta = await openDB('scc', 4)
+  const dbReabierta = await openDB('scc', 5)
   const guardada = await dbReabierta.get('sesiones', sesion.id)
   dbReabierta.close()
 

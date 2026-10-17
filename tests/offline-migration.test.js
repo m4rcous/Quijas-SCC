@@ -49,7 +49,7 @@ test('la versión 3 migra desde v1 y conserva cola, sesiones y lecturas', async 
 
   assert.equal((await obtenerSesionLocal('sesion-local')).estado, 'ACTIVA')
   assert.equal(await contarLecturasSesion('sesion-local'), 1)
-  const migrada = await openDB('scc', 4)
+  const migrada = await openDB('scc', 5)
   assert.equal(
     migrada.transaction('sesiones').store.indexNames.contains('dni_operador'),
     true

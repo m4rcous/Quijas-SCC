@@ -191,7 +191,11 @@ test('la caché del mismo supervisor separa lotes y variedades por cultivo', asy
   )
   assert.equal(b.lotes[0].variedades[0].nombre, 'W. Murcott')
   assert.equal(b.campania.cultivo_nombre, 'Mandarina')
-  assert.equal(b.campania.fecha_inicio, new Date().toISOString().slice(0, 10))
+  // La fecha persistida usa la zona horaria de PostgreSQL; no el día UTC de JS.
+  const inicio = (
+    await db.query('select fecha_inicio::text from campanias where id=$1', [B])
+  ).rows[0].fecha_inicio
+  assert.equal(b.campania.fecha_inicio, inicio)
   assert.ok(b.sincronizado_en)
   assert.ok(
     b.trabajadores.some((t) => t.dni === otro && t.roles.includes('SUPERVISORA'))

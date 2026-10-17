@@ -8,7 +8,7 @@ import {
   obtenerProduccionDiaria,
   reemplazarProduccionDiaria,
   resumirProduccionDiaria
-} from '../src/modules/produccionDiaria.js'
+} from '../src/contexts/harvest/application/reports/produccionDiaria.js'
 
 const respuestaBase = {
   ok: true,
@@ -68,21 +68,18 @@ test('formatea YYYY-MM-DD sin convertir la fecha a Date', () => {
   assert.equal(formatearFechaCalendario('2026-09-30'), '30/09/2026')
 })
 
-test('pasa la timezone obtenida del cliente a la RPC', async () => {
+test('pasa la zona horaria del cliente a la operación de producción', async () => {
   let llamada
-  const rpc = async (nombre, parametros) => {
-    llamada = { nombre, parametros }
-    return { data: respuestaBase, error: null }
+  const consultar = async (parametros) => {
+    llamada = parametros
+    return respuestaBase
   }
 
-  await obtenerProduccionDiaria('12345678', rpc, () => 'America/Lima')
+  await obtenerProduccionDiaria('12345678', consultar, () => 'America/Lima')
 
   assert.deepEqual(llamada, {
-    nombre: 'obtener_produccion_diaria',
-    parametros: {
-      p_dni_operador: '12345678',
-      p_zona_horaria: 'America/Lima'
-    }
+    dniOperador: '12345678',
+    zonaHoraria: 'America/Lima'
   })
 })
 
@@ -111,24 +108,24 @@ test('una respuesta vacía produce un resumen vacío', () => {
   })
 })
 
-test('propaga el error de la RPC', async () => {
-  const rpc = async () => ({ data: null, error: { message: 'RPC no disponible' } })
+test('propaga el error de la consulta', async () => {
+  const consultar = async () => {
+    throw new Error('RPC no disponible')
+  }
   await assert.rejects(
-    obtenerProduccionDiaria('12345678', rpc, () => 'America/Lima'),
+    obtenerProduccionDiaria('12345678', consultar, () => 'America/Lima'),
     /RPC no disponible/
   )
 })
 
-test('RPC ausente informa que Administración debe habilitar el reporte', async () => {
-  const rpc = async () => ({
-    data: null,
-    error: {
-      code: 'PGRST202',
-      message: 'Could not find the function in the schema cache'
-    }
-  })
+test('operación ausente informa que Administración debe habilitar el reporte', async () => {
+  const consultar = async () => {
+    throw new Error(
+      'Producción por día no está disponible. Solicite a Administración que habilite el reporte.'
+    )
+  }
   await assert.rejects(
-    obtenerProduccionDiaria('12345678', rpc, () => 'America/Lima'),
+    obtenerProduccionDiaria('12345678', consultar, () => 'America/Lima'),
     /Solicite a Administración que habilite el reporte/
   )
 })

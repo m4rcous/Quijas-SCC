@@ -11,11 +11,11 @@ import {
   obtenerSesionLocal,
   obtenerColaCompleta
 } from '../src/offline/db.js'
-import { seleccionarVariedadLote } from '../src/modules/variedadesLote.js'
+import { seleccionarVariedadLote } from '../src/contexts/campaign-management/domain/variedadesLote.js'
 import {
   normalizarProduccionLotes,
   resumirProduccionLotes
-} from '../src/modules/produccionLotes.js'
+} from '../src/contexts/harvest/application/reports/produccionLotes.js'
 
 const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf8')
 const sql = (file) => read('../supabase/migrations/' + file)

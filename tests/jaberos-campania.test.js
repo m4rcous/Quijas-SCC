@@ -14,7 +14,7 @@ import {
   FILTROS_JABEROS_CAMPANIA,
   filtrarJaberosCampania,
   obtenerBadgeEstadoJabero
-} from '../src/modules/jaberosCampania.js'
+} from '../src/contexts/workforce/application/queries/jaberosCampania.js'
 
 function trabajador({
   dni = '80000001',
@@ -174,14 +174,14 @@ test('el estado pendiente persiste al cerrar y reabrir una conexión IndexedDB',
   await registrarJaberoOffline('12345678', '86000001')
 
   const conexionInicial = await new Promise((resolve, reject) => {
-    const request = indexedDB.open('scc', 4)
+    const request = indexedDB.open('scc', 5)
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
   })
   conexionInicial.close()
 
   const conexionReabierta = await new Promise((resolve, reject) => {
-    const request = indexedDB.open('scc', 4)
+    const request = indexedDB.open('scc', 5)
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
   })

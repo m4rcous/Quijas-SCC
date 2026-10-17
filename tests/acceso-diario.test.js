@@ -5,8 +5,8 @@ import vm from 'node:vm'
 import {
   fechaOperativa,
   autorizacionOperadorVigente
-} from '../src/modules/fechaOperativa.js'
-import { validarOperadorConFuentes } from '../src/modules/authLogic.js'
+} from '../src/contexts/identity-access/domain/fechaOperativa.js'
+import { validarOperadorConFuentes } from '../src/contexts/identity-access/application/authLogic.js'
 
 const dni = '12345678'
 const hoy = () => ({ dni, nombre: 'Jabero', autorizado_para_fecha: fechaOperativa() })
@@ -53,7 +53,7 @@ test('guarda la fecha autorizada por el servidor y nunca sustituye un rechazo po
   const respuesta = hoy()
   await validarOperadorConFuentes(
     dni,
-    async () => ({ data: respuesta }),
+    async () => respuesta,
     async () => null,
     async (o) => {
       guardado = o
@@ -63,7 +63,9 @@ test('guarda la fecha autorizada por el servidor y nunca sustituye un rechazo po
   await assert.rejects(
     validarOperadorConFuentes(
       dni,
-      async () => ({ error: { message: 'No autorizado' } }),
+      async () => {
+        throw new Error('No autorizado')
+      },
       async () => hoy(),
       async () => {}
     ),
@@ -72,7 +74,7 @@ test('guarda la fecha autorizada por el servidor y nunca sustituye un rechazo po
   await assert.rejects(
     validarOperadorConFuentes(
       dni,
-      async () => ({ data: { dni } }),
+      async () => ({ dni }),
       async () => hoy(),
       async () => {}
     ),

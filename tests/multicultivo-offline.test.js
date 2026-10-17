@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import * as local from '../src/offline/db.js'
 import { ejecutarCola, obtenerOperacionesDependientes } from '../src/offline/cola.js'
-import { validarOperadorConFuentes } from '../src/modules/authLogic.js'
-import { fechaOperativa } from '../src/modules/fechaOperativa.js'
+import { validarOperadorConFuentes } from '../src/contexts/identity-access/application/authLogic.js'
+import { fechaOperativa } from '../src/contexts/identity-access/domain/fechaOperativa.js'
 
 const operador = '47480378'
 const cache = (id, rol) => ({
@@ -159,7 +159,7 @@ test('la autorización offline conserva las campañas del login y caduca por dí
   let guardado
   await validarOperadorConFuentes(
     operador,
-    async () => ({ data: remoto }),
+    async () => remoto,
     async () => null,
     async (value) => {
       guardado = value

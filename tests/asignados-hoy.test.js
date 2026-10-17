@@ -6,7 +6,7 @@ import {
   filtrarAsignacionesHoy,
   obtenerBadgeEstadoAsignacion,
   perteneceAlDiaLocal
-} from '../src/modules/asignadosHoy.js'
+} from '../src/contexts/harvest/application/queries/asignadosHoy.js'
 
 function ticket({
   codigo = 'TICKET-001',

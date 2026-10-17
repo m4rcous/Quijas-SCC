@@ -1,8 +1,9 @@
+import { crearSupabaseBackend } from '../src/infrastructure/supabase/backendAdapter.js'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test, { before, after } from 'node:test'
 import { PGlite } from '@electric-sql/pglite'
-import { obtenerProduccionDiaria } from '../src/modules/produccionDiaria.js'
+import { obtenerProduccionDiaria } from '../src/contexts/harvest/application/reports/produccionDiaria.js'
 
 const db = new PGlite()
 const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf8')
@@ -56,10 +57,12 @@ test('restauración expone la firma exacta de la PWA y recarga la caché de Post
 test('PWA consulta producción restaurada: cuenta lecturas repetidas y agrupa por día de Lima', async () => {
   const resultado = await obtenerProduccionDiaria(
     '47480378',
-    async (name, args) => {
-      assert.equal(name, 'obtener_produccion_diaria')
-      return { data: await consultar(args.p_dni_operador, args.p_zona_horaria) }
-    },
+    crearSupabaseBackend({
+      rpc: async (name, args) => {
+        assert.equal(name, 'obtener_produccion_diaria')
+        return { data: await consultar(args.p_dni_operador, args.p_zona_horaria) }
+      }
+    }).obtenerProduccionDiaria,
     () => 'America/Lima'
   )
   assert.deepEqual(resultado.produccion, [

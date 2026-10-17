@@ -1,5 +1,12 @@
 import { openDB } from 'idb'
+import { migrarOwnershipLocal, validarOwnershipCache } from './tenants.js'
+import { tenantDeRecurso, exigirMismoTenant } from '../contexts/platform/index.js'
 import { evaluarDescarteOperacion } from './cola.js'
+import { crearStoresHarvest, crearHarvestLocal, storesHarvest } from './harvest.js'
+import {
+  modeloOperativoHarvest,
+  EscrituraLegacyRetirada
+} from '../contexts/harvest/index.js'
 import {
   conCampania,
   establecerContextoCampania,
@@ -8,7 +15,7 @@ import {
 } from './campanias.js'
 
 const DB_NAME = 'scc'
-const DB_VERSION = 4
+const DB_VERSION = 5
 
 const rawDbPromise = openDB(DB_NAME, DB_VERSION, {
   upgrade(db, oldVersion, _newVersion, transaction) {
@@ -56,8 +63,24 @@ const rawDbPromise = openDB(DB_NAME, DB_VERSION, {
     }
     if (oldVersion < 4)
       migrarCampaniasLocales(db, transaction).catch(() => transaction.abort())
+    if (oldVersion < 5) crearStoresHarvest(db)
   }
-})
+}).then(migrarOwnershipLocal)
+const harvestLocal = crearHarvestLocal({ dbPromise: rawDbPromise, crearOperacionEnTx })
+export const obtenerModeloOperativoHarvest = (campaniaId) =>
+  harvestLocal.obtenerModeloOperativo(campaniaId)
+export const guardarSnapshotHarvest = (snapshot) =>
+  harvestLocal.guardarSnapshot(snapshot)
+export const obtenerEstadoHarvest = (codigo, campaniaId) =>
+  harvestLocal.obtener(codigo, campaniaId)
+export const reservarAsignacionHarvest = (solicitud) =>
+  harvestLocal.reservarAsignacion(solicitud)
+export const reservarConsumoHarvest = (solicitud) =>
+  harvestLocal.reservarConsumo(solicitud)
+export const confirmarOperacionHarvest = (operacion, resultado) =>
+  harvestLocal.confirmar(operacion, resultado)
+export const rechazarOperacionHarvest = (operacion, error) =>
+  harvestLocal.rechazar(operacion, error)
 const dbPromise = {
   then(resolve, reject) {
     const id = obtenerContextoCampania()
@@ -102,17 +125,38 @@ export async function guardarCache(cache) {
   ) {
     throw new Error('El servidor devolvió una caché operativa inválida.')
   }
+  const tenantId = validarOwnershipCache(cache)
+  cache = {
+    ...cache,
+    campania: {
+      ...(typeof cache.campania === 'object'
+        ? cache.campania
+        : { nombre: cache.campania }),
+      tenant_id: tenantId
+    }
+  }
   const db = (await dbPromise).conCampania(
     cache.campania?.id ?? cache.campania?.campania_id ?? obtenerContextoCampania()
   )
 
   const tx = db.transaction(
-    ['meta', 'trabajadores', 'lotes', 'tickets', 'cola'],
+    [
+      'meta',
+      'trabajadores',
+      'lotes',
+      'tickets',
+      'cola',
+      'lecturas',
+      'sesiones',
+      'operadores',
+      ...storesHarvest
+    ],
     'readwrite'
   )
 
   try {
     await reemplazarCacheEnTx(tx, cache)
+    if (cache.harvest) await harvestLocal.incorporarEnTx(tx, cache.harvest)
     await tx.done
   } catch (error) {
     try {
@@ -126,6 +170,9 @@ export async function guardarCache(cache) {
 }
 
 async function reemplazarCacheEnTx(tx, cache) {
+  const anterior = await tx.objectStore('meta').get(`campania:${cache.campania?.id}`)
+  if (anterior && tenantDeRecurso(anterior) !== tenantDeRecurso(cache.campania))
+    throw new Error('El propietario Tenant de la campaña es inmutable.')
   // Solo un nombre oficial de esta respuesta reemplaza nombres en tickets locales.
   const nombresServidor = new Map(
     cache.trabajadores
@@ -402,8 +449,15 @@ export async function obtenerCampaniaActiva() {
 
 export async function guardarSesionLocal(sesion) {
   const db = await dbPromise
+  const campania = await db.get(
+    'meta',
+    `campania:${sesion.campania_id ?? db.campaniaId}`
+  )
+  if (sesion.tenantId !== undefined || sesion.tenant_id !== undefined)
+    exigirMismoTenant(campania, sesion)
   await db.put('sesiones', {
     ...sesion,
+    tenant_id: tenantDeRecurso(campania),
     campania_id: sesion.campania_id ?? db.campaniaId
   })
 }
@@ -485,8 +539,15 @@ export async function cerrarSesionLocal(id) {
 
 export async function guardarLecturaLocal(lectura) {
   const db = await dbPromise
+  const campania = await db.get(
+    'meta',
+    `campania:${lectura.campania_id ?? db.campaniaId}`
+  )
+  if (lectura.tenantId !== undefined || lectura.tenant_id !== undefined)
+    exigirMismoTenant(campania, lectura)
   await db.put('lecturas', {
     ...lectura,
+    tenant_id: tenantDeRecurso(campania),
     campania_id: lectura.campania_id ?? db.campaniaId
   })
 }
@@ -504,24 +565,43 @@ export async function marcarLecturaSincronizada(id) {
 }
 
 export async function contarLecturasSesion(sesionId) {
-  const db = await dbPromise
-  return db.countFromIndex('lecturas', 'sesion_id', sesionId)
+  return (await obtenerLecturasSesion(sesionId)).length
 }
 
 export async function obtenerLecturasSesion(sesionId) {
   const db = await dbPromise
-  return db.getAllFromIndex('lecturas', 'sesion_id', sesionId)
+  const lecturas = await db.getAllFromIndex('lecturas', 'sesion_id', sesionId)
+  const rechazadas = new Set(
+    (await db.getAll('cola'))
+      .filter(
+        (op) =>
+          op.tipo === 'REGISTRAR_JABA' &&
+          op.estado === 'ERROR' &&
+          (op.payload.campaniaId ?? '') === db.campaniaId
+      )
+      .map((op) => op.payload.lecturaId)
+  )
+  return lecturas.filter(
+    (l) =>
+      (l.campania_id ?? '') === db.campaniaId &&
+      l.valida !== false &&
+      !rechazadas.has(l.id)
+  )
+}
+export async function obtenerLecturasSesionCompletas(sesionId) {
+  const db = await dbPromise
+  return (await db.getAllFromIndex('lecturas', 'sesion_id', sesionId)).filter(
+    (l) => (l.campania_id ?? '') === db.campaniaId
+  )
 }
 
 export async function contarLecturasCosechador(sesionId, dni) {
-  const db = await dbPromise
-  const lecturas = await db.getAllFromIndex('lecturas', 'sesion_id', sesionId)
+  const lecturas = await obtenerLecturasSesion(sesionId)
   return lecturas.filter((lectura) => lectura.cosechador_dni === dni).length
 }
 
 export async function obtenerUltimaLecturaSesion(sesionId) {
-  const db = await dbPromise
-  const lecturas = await db.getAllFromIndex('lecturas', 'sesion_id', sesionId)
+  const lecturas = await obtenerLecturasSesion(sesionId)
   return lecturas
     .sort((a, b) => (a.fecha_hora ?? '').localeCompare(b.fecha_hora ?? ''))
     .at(-1)
@@ -545,6 +625,9 @@ async function crearOperacionEnTx(tx, tipo, payload) {
   const creadoEnMs = Math.max(Date.now(), (ultimoCreadoEn ?? 0) + 1)
 
   const operacion = {
+    tenant_id: tenantDeRecurso(
+      await metaStore.get(`campania:${payload.campaniaId ?? tx.campaniaId}`)
+    ),
     id: crypto.randomUUID(),
 
     tipo,
@@ -570,10 +653,12 @@ export async function guardarAsignacionOffline({
   cosechadorDni,
   cosechador,
   dniOperador,
-  fechaAsignacion = new Date().toISOString()
+  fechaAsignacion = new Date().toISOString(),
+  modeloSolicitado
 }) {
   const db = await dbPromise
   const tx = db.transaction(['meta', 'cola', 'tickets', 'trabajadores'], 'readwrite')
+  await validarEscrituraLegacyEnTx(tx, modeloSolicitado === 'LEGACY')
   if (await tx.objectStore('tickets').get(codigoTicket)) {
     throw new Error('El ticket ya fue asignado.')
   }
@@ -599,6 +684,11 @@ export async function guardarAsignacionOffline({
     dniCosechador: cosechadorDni,
     codigoTicket
   })
+  if (modeloSolicitado === 'LEGACY') {
+    operacion.modelo = 'LEGACY'
+    operacion.origenVersion = 6
+    await tx.objectStore('cola').put(operacion)
+  }
   await tx.objectStore('tickets').put({
     codigo_ticket: codigoTicket,
     cosechador_dni: cosechadorDni,
@@ -679,6 +769,10 @@ export async function iniciarSesionOffline(sesion, dniOperador) {
   ) {
     throw new Error('El jabero ya tiene una sesión activa. Continúe esa sesión.')
   }
+  const campania = await tx.objectStore('meta').get(`campania:${tx.campaniaId}`)
+  if (sesion.tenantId !== undefined || sesion.tenant_id !== undefined)
+    exigirMismoTenant(campania, sesion)
+  sesion.tenant_id = tenantDeRecurso(campania)
   const operacion = await crearOperacionEnTx(tx, 'INICIAR_SESION', {
     dniOperador,
     dniJabero: sesion.dni_jabero,
@@ -695,11 +789,18 @@ export async function iniciarSesionOffline(sesion, dniOperador) {
 export async function registrarLecturaOffline(lectura, dniOperador) {
   const db = await dbPromise
   const tx = db.transaction(['meta', 'cola', 'lecturas', 'sesiones'], 'readwrite')
+  await validarEscrituraLegacyEnTx(tx, lectura.modelo === 'LEGACY')
   const sesion = await tx.objectStore('sesiones').get(lectura.sesion_id)
   if (!sesion || sesion.estado !== 'ACTIVA') {
     throw new Error('La sesión de lectura ya no está activa.')
   }
   validarCampaniaSesion(sesion, tx.campaniaId)
+  exigirMismoTenant(
+    await tx.objectStore('meta').get(`campania:${tx.campaniaId}`),
+    sesion
+  )
+  if (lectura.tenantId !== undefined || lectura.tenant_id !== undefined)
+    exigirMismoTenant(sesion, lectura)
   const operacion = await crearOperacionEnTx(tx, 'REGISTRAR_JABA', {
     dniOperador,
     sesionId: lectura.sesion_id,
@@ -708,11 +809,24 @@ export async function registrarLecturaOffline(lectura, dniOperador) {
     fechaHora: lectura.fecha_hora,
     campaniaId: sesion.campania_id
   })
-  await tx
-    .objectStore('lecturas')
-    .put({ ...lectura, campania_id: sesion.campania_id ?? tx.campaniaId })
+  if (lectura.modelo === 'LEGACY') {
+    operacion.modelo = 'LEGACY'
+    operacion.origenVersion = 6
+    await tx.objectStore('cola').put(operacion)
+  }
+  await tx.objectStore('lecturas').put({
+    ...lectura,
+    tenant_id: tenantDeRecurso(sesion),
+    campania_id: sesion.campania_id ?? tx.campaniaId
+  })
   await tx.done
   return operacion
+}
+
+async function validarEscrituraLegacyEnTx(tx, estricto) {
+  const meta = await tx.objectStore('meta').get(`harvest:${tx.campaniaId}`)
+  if (meta?.cutover) throw new EscrituraLegacyRetirada()
+  if (estricto) modeloOperativoHarvest(meta?.cutover, tx.campaniaId)
 }
 
 export async function finalizarSesionOffline(sesionId, dniOperador) {
@@ -723,6 +837,10 @@ export async function finalizarSesionOffline(sesionId, dniOperador) {
     throw new Error('La sesión ya fue finalizada.')
   }
   validarCampaniaSesion(sesion, tx.campaniaId)
+  exigirMismoTenant(
+    await tx.objectStore('meta').get(`campania:${tx.campaniaId}`),
+    sesion
+  )
   const operacion = await crearOperacionEnTx(tx, 'CERRAR_SESION', {
     dniOperador,
     sesionId,
@@ -822,18 +940,33 @@ export async function marcarOperacionError(id, error) {
 
 export async function marcarOperacionTemporal(id, error) {
   const db = await dbPromise
-  const operacion = await db.get('cola', id)
-  if (!operacion) return
-  operacion.estado = 'PENDIENTE'
-  operacion.error = error
-  operacion.intentos = (operacion.intentos ?? 0) + 1
-  await db.put('cola', operacion)
+  const tx = db.transaction('cola', 'readwrite')
+  try {
+    const operacion = await tx.store.get(id)
+    // Una respuesta tardía no reactiva un rechazo/ACK incorporado por otra pestaña.
+    if (operacion?.estado === 'PENDIENTE') {
+      await tx.store.put({
+        ...operacion,
+        error,
+        intentos: (operacion.intentos ?? 0) + 1
+      })
+    }
+    await tx.done
+  } catch (fallo) {
+    try {
+      tx.abort()
+    } catch {}
+    await tx.done.catch(() => {})
+    throw fallo
+  }
 }
 
 export async function reintentarOperacion(id) {
   const db = await dbPromise
   const operacion = await db.get('cola', id)
   if (!operacion || operacion.estado !== 'ERROR') return false
+  if (operacion.retiradaPorCutover) return false
+  if (operacion.modelo === 'HARVEST') return harvestLocal.reintentar(operacion)
   operacion.estado = 'PENDIENTE'
   operacion.error = null
   await db.put('cola', operacion)
@@ -888,10 +1021,17 @@ export async function limpiarOperacionesSincronizadas(dias = 30) {
     )
   )
   const cola = tx.objectStore('cola')
+  const operaciones = await cola.getAll()
+  const necesarias = new Set(
+    operaciones
+      .filter((op) => op.estado !== 'SINCRONIZADA')
+      .flatMap((op) => op.dependencias ?? [])
+  )
   let eliminadas = 0
-  for (const operacion of await cola.getAll()) {
+  for (const operacion of operaciones) {
     if (
       operacion.estado === 'SINCRONIZADA' &&
+      !necesarias.has(operacion.id) &&
       Date.parse(operacion.sincronizado_en) < limite &&
       !(operacion.tipo === 'INICIAR_SESION' && activas.has(operacion.payload.sesionId))
     ) {

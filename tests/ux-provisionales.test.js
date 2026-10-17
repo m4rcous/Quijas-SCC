@@ -1,3 +1,5 @@
+import { snapshotHarvest } from './helpers/snapshotHarvest.js'
+import { casosDeUsoParaVista } from './helpers/casosDeUso.js'
 import 'fake-indexeddb/auto'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -5,12 +7,12 @@ import test, { beforeEach } from 'node:test'
 import vm from 'node:vm'
 import { openDB } from 'idb'
 import * as local from '../src/offline/db.js'
-import * as asignados from '../src/modules/asignadosHoy.js'
-import * as jaberos from '../src/modules/jaberosCampania.js'
-import * as cosechadores from '../src/modules/cosechadoresJabas.js'
-import * as sesiones from '../src/modules/sesionesLectura.js'
+import * as asignados from '../src/contexts/harvest/application/queries/asignadosHoy.js'
+import * as jaberos from '../src/contexts/workforce/application/queries/jaberosCampania.js'
+import * as cosechadores from '../src/contexts/harvest/application/queries/cosechadoresJabas.js'
+import * as sesiones from '../src/contexts/harvest/application/queries/sesionesLectura.js'
 import { nombreCosechadorVisible } from '../src/modules/cosechadorLocal.js'
-import { parametrosCampania } from '../src/modules/campaniaOperador.js'
+import { crearSupabaseBackend } from '../src/infrastructure/supabase/backendAdapter.js'
 
 const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf8')
 const main = read('../src/main.js')
@@ -24,7 +26,7 @@ const base = (trabajadores = [], tickets = []) => ({
 })
 beforeEach(async () => {
   await local.seleccionarCampaniaLocal('campania-test')
-  const db = await openDB('scc', 4)
+  const db = await openDB('scc', 5)
   const tx = db.transaction([...db.objectStoreNames], 'readwrite')
   for (const name of db.objectStoreNames) await tx.objectStore(name).clear()
   await tx.done
@@ -98,7 +100,6 @@ function consulta(id, consultar = async () => ({ data: base() })) {
     ...cosechadores,
     ...sesiones,
     nombreCosechadorVisible,
-    parametrosCampania,
     document: { createElement: element },
     operador: { dni: '47480378', campania: { id: 'campania-test' } },
     consultaActual: null,
@@ -111,12 +112,20 @@ function consulta(id, consultar = async () => ({ data: base() })) {
     filtroSesionesLectura: sesiones.FILTROS_SESIONES_LECTURA.TODAS,
     navigator: { onLine: true },
     mostrarVista() {},
-    supabase: {
+    backend: crearSupabaseBackend({
       rpc: async (name, args) => {
         calls.push({ name, args })
+        if (name === 'harvest_obtener_snapshot')
+          return {
+            data: snapshotHarvest({
+              campaniaId: args.p_campania_id,
+              operadorDni: args.p_dni_operador,
+              codigos: []
+            })
+          }
         return consultar()
       }
-    }
+    })
   })
   const cache = read('../src/modules/cacheOperativa.js')
   vm.runInContext(
@@ -205,6 +214,7 @@ test('éxito de asignación online y offline dice exactamente Ticket C71048263 a
       actualizarEstadoConexion: async () => {},
       sincronizarPendientes: async () => {}
     }
+    ctx.casosDeUso = casosDeUsoParaVista(ctx)
     vm.runInNewContext(main.slice(start, end), ctx)
     await handler('C71048263', () => {})
     assert.deepEqual(mensajes, [
@@ -430,6 +440,7 @@ test('Registrar Jabero permite DNI desconocido desde el formulario online y offl
       actualizarEstadoConexion: async () => {},
       sincronizarPendientes: async () => {}
     }
+    ctx.casosDeUso = casosDeUsoParaVista(ctx)
     vm.runInNewContext(main.slice(start, end), ctx)
     const dni = onLine ? '76338980' : '76338981'
     await handler(dni, () => {})
@@ -576,7 +587,7 @@ test('Sesiones refresca nombres y conserva Activas/Cerradas sin perder lecturas 
   )
   vista.ctx.navigator.onLine = false
   await vista.actualizar()
-  assert.equal(vista.calls.length, 1)
+  assert.equal(vista.calls.length, 2)
   assert.deepEqual(vista.nombres(), ['Marco Góngora'])
 })
 
